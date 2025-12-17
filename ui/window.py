@@ -84,13 +84,17 @@ QLabel#card_value_gold {
     color: #ffd700;
 }
 
+/* =========================================================================
+   CORREÇÃO: QLineEdit com altura mínima e padding adequado
+   ========================================================================= */
 QLineEdit {
     background-color: #0f3460;
     border: 2px solid #1a1a2e;
     border-radius: 6px;
-    padding: 10px 15px;
+    padding: 12px 15px;
     font-size: 14px;
     color: #ffffff;
+    min-height: 20px;
 }
 
 QLineEdit:focus {
@@ -101,14 +105,18 @@ QLineEdit:hover {
     border: 2px solid #533483;
 }
 
+/* =========================================================================
+   CORREÇÃO: Botões com altura mínima fixa e padding vertical maior
+   ========================================================================= */
 QPushButton#primary {
     background-color: #e94560;
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 12px 20px;
+    padding: 14px 20px;
     font-size: 14px;
     font-weight: bold;
+    min-height: 24px;
 }
 
 QPushButton#primary:hover {
@@ -124,8 +132,9 @@ QPushButton#secondary {
     color: #e94560;
     border: 2px solid #e94560;
     border-radius: 6px;
-    padding: 10px 20px;
+    padding: 12px 20px;
     font-size: 13px;
+    min-height: 20px;
 }
 
 QPushButton#secondary:hover {
@@ -284,7 +293,7 @@ class MainWindow(QMainWindow):
         sidebar.setFixedWidth(320)
         
         layout = QVBoxLayout(sidebar)
-        layout.setSpacing(20)
+        layout.setSpacing(15)  # CORREÇÃO: Reduzi spacing para melhor distribuição
         layout.setContentsMargins(20, 25, 20, 25)
         
         # Título
@@ -296,7 +305,7 @@ class MainWindow(QMainWindow):
         subtitle.setObjectName("subtitle")
         layout.addWidget(subtitle)
         
-        layout.addSpacing(20)
+        layout.addSpacing(15)
         
         # Campos de entrada
         self.input_initial = self._create_input_field(
@@ -317,17 +326,19 @@ class MainWindow(QMainWindow):
         
         layout.addSpacing(10)
         
-        # Botão calcular
+        # Botão calcular - CORREÇÃO: Altura fixa definida programaticamente
         btn_calculate = QPushButton("📊  Calcular Simulação")
         btn_calculate.setObjectName("primary")
         btn_calculate.setCursor(Qt.PointingHandCursor)
+        btn_calculate.setFixedHeight(48)  # CORREÇÃO: Altura fixa
         btn_calculate.clicked.connect(self._on_calculate)
         layout.addWidget(btn_calculate)
         
-        # Botão limpar
+        # Botão limpar - CORREÇÃO: Altura fixa definida programaticamente
         btn_clear = QPushButton("Limpar Campos")
         btn_clear.setObjectName("secondary")
         btn_clear.setCursor(Qt.PointingHandCursor)
+        btn_clear.setFixedHeight(44)  # CORREÇÃO: Altura fixa
         btn_clear.clicked.connect(self._on_clear)
         layout.addWidget(btn_clear)
         
@@ -352,6 +363,7 @@ class MainWindow(QMainWindow):
         
         input_field = QLineEdit()
         input_field.setPlaceholderText(placeholder)
+        input_field.setFixedHeight(44)  # CORREÇÃO: Altura fixa para inputs
         
         # Validadores
         if is_integer:
