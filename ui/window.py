@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.setWindowTitle("PyInvest - Simulador de Investimentos")
-        self.setMinimumSize(1400, 900)
+        self.setMinimumSize(1200, 800)
         self.setStyleSheet(get_style())
         
         # Widget central com scroll
@@ -40,15 +40,15 @@ class MainWindow(QMainWindow):
         scroll.setWidget(container)
         
         main_layout = QVBoxLayout(container)
-        main_layout.setContentsMargins(30, 30, 30, 30)
-        main_layout.setSpacing(25)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
         
         # Header
         self._create_header(main_layout)
         
-        # Conteúdo principal (duas colunas)
+        # Conteúdo principal (duas colunas 50/50)
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(25)
+        content_layout.setSpacing(20)
         
         # Coluna esquerda - Parâmetros
         self._create_parameters_panel(content_layout)
@@ -58,28 +58,28 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(content_layout)
         
-        # Seção de gráficos
+        # Seção de gráficos (proporção 60/40)
         self._create_charts_section(main_layout)
         
         # Tabela de projeção
         self._create_projection_section(main_layout)
-        
-        # Espaçador final
-        main_layout.addStretch()
     
     def _create_header(self, layout: QVBoxLayout):
         """Cria o cabeçalho da aplicação."""
-        header = QWidget()
+        header = QFrame()
+        header.setObjectName("card")
+        header.setFixedHeight(100)
+        
         header_layout = QVBoxLayout(header)
         header_layout.setAlignment(Qt.AlignCenter)
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(6)
         
         # Título com ícone
         title_layout = QHBoxLayout()
         title_layout.setAlignment(Qt.AlignCenter)
         
         icon_label = QLabel("💰")
-        icon_label.setStyleSheet("font-size: 32px; background: transparent;")
+        icon_label.setStyleSheet("font-size: 28px; background: transparent;")
         
         title = QLabel("Simulador de Investimentos")
         title.setObjectName("main_title")
@@ -101,18 +101,15 @@ class MainWindow(QMainWindow):
         """Cria o painel de parâmetros (coluna esquerda)."""
         panel = QFrame()
         panel.setObjectName("sidebar")
-        panel.setFixedWidth(420)
         
         panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(25, 25, 25, 25)
-        panel_layout.setSpacing(18)
+        panel_layout.setContentsMargins(20, 20, 20, 20)
+        panel_layout.setSpacing(12)
         
         # Título da seção
         section_title = QLabel("Parâmetros da Simulação")
         section_title.setObjectName("section_title")
         panel_layout.addWidget(section_title)
-        
-        panel_layout.addSpacing(10)
         
         # Campos de entrada
         self.input_initial = self._create_input(
@@ -135,26 +132,24 @@ class MainWindow(QMainWindow):
             panel_layout, "Período (Anos)", "10", is_integer=True
         )
         
-        panel_layout.addSpacing(15)
+        panel_layout.addSpacing(10)
         
         # Botões
         btn_calculate = QPushButton("Calcular Simulação")
         btn_calculate.setObjectName("primary")
         btn_calculate.setCursor(Qt.PointingHandCursor)
-        btn_calculate.setFixedHeight(50)
+        btn_calculate.setFixedHeight(48)
         btn_calculate.clicked.connect(self._on_calculate)
         panel_layout.addWidget(btn_calculate)
         
         btn_reset = QPushButton("Resetar Valores")
         btn_reset.setObjectName("secondary")
         btn_reset.setCursor(Qt.PointingHandCursor)
-        btn_reset.setFixedHeight(46)
+        btn_reset.setFixedHeight(44)
         btn_reset.clicked.connect(self._on_reset)
         panel_layout.addWidget(btn_reset)
         
-        panel_layout.addStretch()
-        
-        layout.addWidget(panel)
+        layout.addWidget(panel, stretch=1)
     
     def _create_input(
         self, layout: QVBoxLayout, label_text: str, 
@@ -167,7 +162,7 @@ class MainWindow(QMainWindow):
         
         input_field = QLineEdit()
         input_field.setPlaceholderText(placeholder)
-        input_field.setFixedHeight(48)
+        input_field.setFixedHeight(42)
         
         if is_integer:
             input_field.setValidator(QIntValidator(1, 100))
@@ -185,19 +180,17 @@ class MainWindow(QMainWindow):
         panel.setObjectName("results_panel")
         
         panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(25, 25, 25, 25)
-        panel_layout.setSpacing(18)
+        panel_layout.setContentsMargins(20, 20, 20, 20)
+        panel_layout.setSpacing(15)
         
         # Título
         section_title = QLabel("Resumo dos Resultados")
         section_title.setObjectName("section_title")
         panel_layout.addWidget(section_title)
         
-        panel_layout.addSpacing(5)
-        
         # Cards de resumo (grid 2x2)
         cards_grid = QGridLayout()
-        cards_grid.setSpacing(15)
+        cards_grid.setSpacing(12)
         
         self.card_invested = SummaryCard("TOTAL INVESTIDO", "R$ 0,00", "invested")
         self.card_interest = SummaryCard("LUCRO COM JUROS", "R$ 0,00", "interest")
@@ -211,8 +204,6 @@ class MainWindow(QMainWindow):
         
         panel_layout.addLayout(cards_grid)
         
-        panel_layout.addSpacing(10)
-        
         # Box de análise
         self.analysis_box = AnalysisBox()
         panel_layout.addWidget(self.analysis_box)
@@ -224,38 +215,40 @@ class MainWindow(QMainWindow):
     def _create_charts_section(self, layout: QVBoxLayout):
         """Cria a seção de gráficos."""
         charts_layout = QHBoxLayout()
-        charts_layout.setSpacing(25)
+        charts_layout.setSpacing(20)
         
-        # Gráfico de evolução (maior)
+        # Gráfico de evolução (60%)
         evolution_frame = QFrame()
         evolution_frame.setObjectName("card")
         evolution_layout = QVBoxLayout(evolution_frame)
-        evolution_layout.setContentsMargins(20, 20, 20, 20)
+        evolution_layout.setContentsMargins(15, 15, 15, 15)
+        evolution_layout.setSpacing(10)
         
         evolution_title = QLabel("Evolução do Patrimônio")
-        evolution_title.setObjectName("section_title")
-        evolution_title.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        evolution_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
         evolution_layout.addWidget(evolution_title)
         
         self.evolution_chart = EvolutionChart()
-        self.evolution_chart.setMinimumHeight(350)
+        self.evolution_chart.setMinimumHeight(300)
+        self.evolution_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         evolution_layout.addWidget(self.evolution_chart)
         
         charts_layout.addWidget(evolution_frame, stretch=3)
         
-        # Gráfico de composição (menor)
+        # Gráfico de composição (40%)
         composition_frame = QFrame()
         composition_frame.setObjectName("card")
         composition_layout = QVBoxLayout(composition_frame)
-        composition_layout.setContentsMargins(20, 20, 20, 20)
+        composition_layout.setContentsMargins(15, 15, 15, 15)
+        composition_layout.setSpacing(10)
         
         composition_title = QLabel("Composição do Saldo Final")
-        composition_title.setObjectName("section_title")
-        composition_title.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        composition_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
         composition_layout.addWidget(composition_title)
         
         self.composition_chart = CompositionChart()
-        self.composition_chart.setMinimumHeight(350)
+        self.composition_chart.setMinimumHeight(300)
+        self.composition_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         composition_layout.addWidget(self.composition_chart)
         
         charts_layout.addWidget(composition_frame, stretch=2)
@@ -268,18 +261,18 @@ class MainWindow(QMainWindow):
         projection_frame.setObjectName("card")
         
         projection_layout = QVBoxLayout(projection_frame)
-        projection_layout.setContentsMargins(20, 20, 20, 20)
-        projection_layout.setSpacing(15)
+        projection_layout.setContentsMargins(15, 15, 15, 15)
+        projection_layout.setSpacing(10)
         
         # Título
         title = QLabel("Projeção Anual")
-        title.setObjectName("section_title")
-        title.setStyleSheet("font-size: 18px; color: #16a085;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #16a085;")
         projection_layout.addWidget(title)
         
         # Tabela
         self.projection_table = ProjectionTable()
-        self.projection_table.setMinimumHeight(400)
+        self.projection_table.setMinimumHeight(300)
+        self.projection_table.setMaximumHeight(450)
         projection_layout.addWidget(self.projection_table)
         
         layout.addWidget(projection_frame)

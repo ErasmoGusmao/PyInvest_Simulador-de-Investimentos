@@ -105,7 +105,7 @@ class EvolutionChart(FigureCanvas):
     """Gráfico de evolução do patrimônio."""
     
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(8, 5), facecolor='#ffffff')
+        self.fig = Figure(figsize=(8, 4), facecolor='#ffffff', dpi=100)
         self.axes = self.fig.add_subplot(111)
         
         super().__init__(self.fig)
@@ -144,11 +144,12 @@ class EvolutionChart(FigureCanvas):
         
         # Converter meses para anos para o eixo X
         years = result.months / 12
+        max_years = int(years[-1])
         
         # Área preenchida
         self.axes.fill_between(
             years, result.balances, 
-            alpha=0.2, color=colors['primary']
+            alpha=0.15, color=colors['primary']
         )
         
         # Linha com marcadores (apenas pontos anuais)
@@ -159,41 +160,61 @@ class EvolutionChart(FigureCanvas):
         # Linha contínua
         self.axes.plot(
             years, result.balances,
-            color=colors['primary'], linewidth=2
+            color=colors['primary'], linewidth=2.5
         )
         
         # Marcadores apenas nos pontos anuais
         self.axes.scatter(
             annual_years, annual_balances,
-            color=colors['primary'], s=50, zorder=5,
-            edgecolors='white', linewidths=2
+            color=colors['primary'], s=40, zorder=5,
+            edgecolors='white', linewidths=1.5
         )
         
-        # Labels
-        self.axes.set_xlabel('', fontsize=10, color='#7f8c8d')
-        self.axes.set_ylabel('', fontsize=10, color='#7f8c8d')
-        
-        # Título e legenda
+        # Legenda
         self.axes.legend(
             ['Saldo Total (R$)'], 
             loc='upper left',
             frameon=True,
             facecolor='white',
             edgecolor='#e0e0e0',
-            fontsize=10
+            fontsize=9
         )
         
-        # Formatação do eixo Y
-        self.axes.yaxis.set_major_formatter(
-            lambda x, p: f'R$ {x/1000:,.0f}'.replace(',', '.') + '' if x >= 1000 else f'R$ {x:,.0f}'
-        )
+        # Formatação do eixo Y - valores monetários
+        def format_currency_axis(x, p):
+            if x >= 1000000:
+                return f'R$ {x/1000000:.1f}M'
+            elif x >= 1000:
+                return f'R$ {x/1000:.0f}k'
+            else:
+                return f'R$ {x:.0f}'
         
-        # Formatação do eixo X
-        max_years = int(years[-1])
-        self.axes.set_xticks(range(0, max_years + 1))
-        self.axes.set_xticklabels([f'Ano {i}' for i in range(0, max_years + 1)])
+        self.axes.yaxis.set_major_formatter(format_currency_axis)
         
-        self.fig.tight_layout()
+        # Formatação do eixo X - CORREÇÃO: evitar sobreposição
+        # Calcular intervalo ideal baseado no número de anos
+        if max_years <= 10:
+            tick_interval = 1
+        elif max_years <= 20:
+            tick_interval = 2
+        elif max_years <= 30:
+            tick_interval = 5
+        else:
+            tick_interval = 10
+        
+        tick_positions = list(range(0, max_years + 1, tick_interval))
+        # Garantir que o último ano apareça
+        if max_years not in tick_positions:
+            tick_positions.append(max_years)
+        
+        self.axes.set_xticks(tick_positions)
+        self.axes.set_xticklabels([f'Ano {i}' for i in tick_positions], fontsize=8)
+        
+        # Rotacionar labels se necessário
+        if max_years > 15:
+            self.axes.tick_params(axis='x', rotation=45)
+        
+        self.fig.tight_layout(pad=1.5)
         self.draw()
 
 
@@ -201,7 +222,7 @@ class CompositionChart(FigureCanvas):
     """Gráfico de rosca mostrando composição do saldo final."""
     
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(5, 5), facecolor='#ffffff')
+        self.fig = Figure(figsize=(4, 4), facecolor='#ffffff', dpi=100)
         self.axes = self.fig.add_subplot(111)
         
         super().__init__(self.fig)
@@ -211,6 +232,7 @@ class CompositionChart(FigureCanvas):
     
     def _draw_empty(self):
         """Desenha gráfico vazio."""
+        self.axes.clear()
         self.axes.text(
             0.5, 0.5, 'Aguardando\nsimulação...',
             transform=self.axes.transAxes,
@@ -239,18 +261,18 @@ class CompositionChart(FigureCanvas):
             wedgeprops=dict(width=0.4, edgecolor='white', linewidth=2)
         )
         
-        # Legenda
+        # Legenda na parte inferior
         self.axes.legend(
             wedges, labels,
             loc='lower center',
-            bbox_to_anchor=(0.5, -0.05),
+            bbox_to_anchor=(0.5, -0.08),
             frameon=False,
-            fontsize=10,
+            fontsize=9,
             ncol=2
         )
         
         self.axes.axis('equal')
-        self.fig.tight_layout()
+        self.fig.tight_layout(pad=0.5)
         self.draw()
 
 
