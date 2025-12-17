@@ -1,371 +1,174 @@
 """
-PyInvest - Interface Gráfica Principal
-Dashboard moderno para simulação de investimentos.
+PyInvest - Janela Principal
+Interface moderna com tema claro para simulação de investimentos.
 """
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QSizePolicy,
-    QSpacerItem, QMessageBox
+    QScrollArea, QMessageBox, QSpacerItem
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QDoubleValidator, QIntValidator
-
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+from PySide6.QtGui import QDoubleValidator, QIntValidator, QFont
 
 from core.calculation import calculate_compound_interest, format_currency
-
-
-# ============================================================================
-# FOLHA DE ESTILOS QSS - TEMA ESCURO MODERNO
-# ============================================================================
-
-DARK_STYLE = """
-QMainWindow {
-    background-color: #1a1a2e;
-}
-
-QWidget {
-    background-color: #1a1a2e;
-    color: #eaeaea;
-    font-family: 'Segoe UI', Arial, sans-serif;
-}
-
-QFrame#sidebar {
-    background-color: #16213e;
-    border-radius: 10px;
-    padding: 15px;
-}
-
-QFrame#card {
-    background-color: #0f3460;
-    border-radius: 8px;
-    padding: 15px;
-    min-height: 80px;
-}
-
-QLabel {
-    color: #eaeaea;
-}
-
-QLabel#title {
-    font-size: 24px;
-    font-weight: bold;
-    color: #e94560;
-}
-
-QLabel#subtitle {
-    font-size: 12px;
-    color: #a0a0a0;
-}
-
-QLabel#card_title {
-    font-size: 11px;
-    color: #a0a0a0;
-    font-weight: normal;
-}
-
-QLabel#card_value {
-    font-size: 20px;
-    font-weight: bold;
-    color: #00d9ff;
-}
-
-QLabel#card_value_green {
-    font-size: 20px;
-    font-weight: bold;
-    color: #00ff88;
-}
-
-QLabel#card_value_gold {
-    font-size: 20px;
-    font-weight: bold;
-    color: #ffd700;
-}
-
-/* =========================================================================
-   CORREÇÃO: QLineEdit com altura mínima e padding adequado
-   ========================================================================= */
-QLineEdit {
-    background-color: #0f3460;
-    border: 2px solid #1a1a2e;
-    border-radius: 6px;
-    padding: 12px 15px;
-    font-size: 14px;
-    color: #ffffff;
-    min-height: 20px;
-}
-
-QLineEdit:focus {
-    border: 2px solid #e94560;
-}
-
-QLineEdit:hover {
-    border: 2px solid #533483;
-}
-
-/* =========================================================================
-   CORREÇÃO: Botões com altura mínima fixa e padding vertical maior
-   ========================================================================= */
-QPushButton#primary {
-    background-color: #e94560;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 14px 20px;
-    font-size: 14px;
-    font-weight: bold;
-    min-height: 24px;
-}
-
-QPushButton#primary:hover {
-    background-color: #ff6b6b;
-}
-
-QPushButton#primary:pressed {
-    background-color: #c73e54;
-}
-
-QPushButton#secondary {
-    background-color: transparent;
-    color: #e94560;
-    border: 2px solid #e94560;
-    border-radius: 6px;
-    padding: 12px 20px;
-    font-size: 13px;
-    min-height: 20px;
-}
-
-QPushButton#secondary:hover {
-    background-color: #e94560;
-    color: white;
-}
-"""
-
-
-class SummaryCard(QFrame):
-    """Card de resumo estilizado."""
-    
-    def __init__(self, title: str, value: str = "R$ 0,00", color_style: str = "card_value"):
-        super().__init__()
-        self.setObjectName("card")
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        
-        # Título do card
-        self.title_label = QLabel(title)
-        self.title_label.setObjectName("card_title")
-        
-        # Valor do card
-        self.value_label = QLabel(value)
-        self.value_label.setObjectName(color_style)
-        
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
-        layout.addStretch()
-    
-    def set_value(self, value: str):
-        """Atualiza o valor exibido no card."""
-        self.value_label.setText(value)
-
-
-class ChartCanvas(FigureCanvas):
-    """Canvas do Matplotlib integrado ao Qt."""
-    
-    def __init__(self, parent=None):
-        # Cria a figura com fundo transparente
-        self.fig = Figure(figsize=(10, 6), facecolor='#1a1a2e')
-        self.axes = self.fig.add_subplot(111)
-        
-        super().__init__(self.fig)
-        self.setParent(parent)
-        
-        # Configuração inicial do gráfico
-        self._setup_style()
-        self._draw_empty_chart()
-    
-    def _setup_style(self):
-        """Configura o estilo visual do gráfico."""
-        self.axes.set_facecolor('#1a1a2e')
-        
-        # Cor dos eixos e labels
-        self.axes.tick_params(colors='#a0a0a0', labelsize=9)
-        self.axes.spines['bottom'].set_color('#333355')
-        self.axes.spines['left'].set_color('#333355')
-        self.axes.spines['top'].set_visible(False)
-        self.axes.spines['right'].set_visible(False)
-        
-        # Grid sutil
-        self.axes.grid(True, linestyle='--', alpha=0.2, color='#555577')
-    
-    def _draw_empty_chart(self):
-        """Desenha um gráfico vazio inicial."""
-        self.axes.set_xlabel('Meses', color='#a0a0a0', fontsize=10)
-        self.axes.set_ylabel('Valor (R$)', color='#a0a0a0', fontsize=10)
-        self.axes.set_title('Evolução do Patrimônio', color='#eaeaea', fontsize=14, pad=15)
-        
-        # Texto informativo
-        self.axes.text(
-            0.5, 0.5, 'Insira os dados e clique em\n"Calcular Simulação"',
-            transform=self.axes.transAxes,
-            ha='center', va='center',
-            fontsize=12, color='#666688',
-            style='italic'
-        )
-        
-        self.fig.tight_layout()
-        self.draw()
-    
-    def update_chart(self, months, balances, total_invested_line):
-        """Atualiza o gráfico com os novos dados."""
-        self.axes.clear()
-        self._setup_style()
-        
-        # Linha do patrimônio total
-        self.axes.fill_between(
-            months, balances, alpha=0.3, color='#00d9ff'
-        )
-        self.axes.plot(
-            months, balances, 
-            color='#00d9ff', linewidth=2.5, label='Patrimônio Total'
-        )
-        
-        # Linha do total investido (sem juros)
-        self.axes.plot(
-            months, total_invested_line,
-            color='#e94560', linewidth=2, linestyle='--', 
-            label='Total Investido', alpha=0.8
-        )
-        
-        # Labels e título
-        self.axes.set_xlabel('Meses', color='#a0a0a0', fontsize=10)
-        self.axes.set_ylabel('Valor (R$)', color='#a0a0a0', fontsize=10)
-        self.axes.set_title('Evolução do Patrimônio', color='#eaeaea', fontsize=14, pad=15)
-        
-        # Legenda
-        legend = self.axes.legend(
-            loc='upper left', 
-            facecolor='#16213e', 
-            edgecolor='#333355',
-            fontsize=9
-        )
-        for text in legend.get_texts():
-            text.set_color('#eaeaea')
-        
-        # Formatação do eixo Y para valores monetários
-        self.axes.yaxis.set_major_formatter(
-            lambda x, p: f'R$ {x/1000:.0f}k' if x >= 1000 else f'R$ {x:.0f}'
-        )
-        
-        self.fig.tight_layout()
-        self.draw()
+from ui.styles import get_style, get_colors
+from ui.widgets import (
+    SummaryCard, GoalStatusCard, EvolutionChart, 
+    CompositionChart, ProjectionTable, AnalysisBox
+)
 
 
 class MainWindow(QMainWindow):
-    """Janela principal da aplicação PyInvest."""
+    """Janela principal do PyInvest."""
     
     def __init__(self):
         super().__init__()
         
         self.setWindowTitle("PyInvest - Simulador de Investimentos")
-        self.setMinimumSize(1200, 700)
-        self.setStyleSheet(DARK_STYLE)
+        self.setMinimumSize(1400, 900)
+        self.setStyleSheet(get_style())
         
-        # Widget central
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        # Widget central com scroll
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setCentralWidget(scroll)
         
-        # Layout principal (horizontal)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
+        # Container principal
+        container = QWidget()
+        scroll.setWidget(container)
         
-        # Cria as duas áreas principais
-        self._create_sidebar(main_layout)
-        self._create_dashboard(main_layout)
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(30, 30, 30, 30)
+        main_layout.setSpacing(25)
+        
+        # Header
+        self._create_header(main_layout)
+        
+        # Conteúdo principal (duas colunas)
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(25)
+        
+        # Coluna esquerda - Parâmetros
+        self._create_parameters_panel(content_layout)
+        
+        # Coluna direita - Resultados
+        self._create_results_panel(content_layout)
+        
+        main_layout.addLayout(content_layout)
+        
+        # Seção de gráficos
+        self._create_charts_section(main_layout)
+        
+        # Tabela de projeção
+        self._create_projection_section(main_layout)
+        
+        # Espaçador final
+        main_layout.addStretch()
     
-    def _create_sidebar(self, parent_layout: QHBoxLayout):
-        """Cria o painel lateral com os inputs."""
-        sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(320)
+    def _create_header(self, layout: QVBoxLayout):
+        """Cria o cabeçalho da aplicação."""
+        header = QWidget()
+        header_layout = QVBoxLayout(header)
+        header_layout.setAlignment(Qt.AlignCenter)
+        header_layout.setSpacing(8)
         
-        layout = QVBoxLayout(sidebar)
-        layout.setSpacing(15)  # CORREÇÃO: Reduzi spacing para melhor distribuição
-        layout.setContentsMargins(20, 25, 20, 25)
+        # Título com ícone
+        title_layout = QHBoxLayout()
+        title_layout.setAlignment(Qt.AlignCenter)
         
-        # Título
-        title = QLabel("PyInvest")
-        title.setObjectName("title")
-        layout.addWidget(title)
+        icon_label = QLabel("💰")
+        icon_label.setStyleSheet("font-size: 32px; background: transparent;")
         
-        subtitle = QLabel("Simulador de Juros Compostos")
-        subtitle.setObjectName("subtitle")
-        layout.addWidget(subtitle)
+        title = QLabel("Simulador de Investimentos")
+        title.setObjectName("main_title")
         
-        layout.addSpacing(15)
+        title_layout.addWidget(icon_label)
+        title_layout.addWidget(title)
+        
+        header_layout.addLayout(title_layout)
+        
+        # Subtítulo
+        subtitle = QLabel("Planeje seu futuro financeiro com juros compostos e aportes mensais")
+        subtitle.setObjectName("main_subtitle")
+        subtitle.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(subtitle)
+        
+        layout.addWidget(header)
+    
+    def _create_parameters_panel(self, layout: QHBoxLayout):
+        """Cria o painel de parâmetros (coluna esquerda)."""
+        panel = QFrame()
+        panel.setObjectName("sidebar")
+        panel.setFixedWidth(420)
+        
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(25, 25, 25, 25)
+        panel_layout.setSpacing(18)
+        
+        # Título da seção
+        section_title = QLabel("Parâmetros da Simulação")
+        section_title.setObjectName("section_title")
+        panel_layout.addWidget(section_title)
+        
+        panel_layout.addSpacing(10)
         
         # Campos de entrada
-        self.input_initial = self._create_input_field(
-            layout, "Montante Inicial", "R$ 10.000,00", is_currency=True
+        self.input_initial = self._create_input(
+            panel_layout, "Capital Inicial (R$)", "10000"
         )
         
-        self.input_monthly = self._create_input_field(
-            layout, "Aporte Mensal", "R$ 1.000,00", is_currency=True
+        self.input_monthly = self._create_input(
+            panel_layout, "Aporte Mensal (R$)", "1000"
         )
         
-        self.input_rate = self._create_input_field(
-            layout, "Taxa de Juros Anual (%)", "12.0", is_percent=True
+        self.input_rate = self._create_input(
+            panel_layout, "Rentabilidade Anual (%)", "10"
         )
         
-        self.input_years = self._create_input_field(
-            layout, "Tempo (Anos)", "10", is_integer=True
+        self.input_goal = self._create_input(
+            panel_layout, "Objetivo (Meta em R$)", "100000"
         )
         
-        layout.addSpacing(10)
+        self.input_years = self._create_input(
+            panel_layout, "Período (Anos)", "10", is_integer=True
+        )
         
-        # Botão calcular - CORREÇÃO: Altura fixa definida programaticamente
-        btn_calculate = QPushButton("📊  Calcular Simulação")
+        panel_layout.addSpacing(15)
+        
+        # Botões
+        btn_calculate = QPushButton("Calcular Simulação")
         btn_calculate.setObjectName("primary")
         btn_calculate.setCursor(Qt.PointingHandCursor)
-        btn_calculate.setFixedHeight(48)  # CORREÇÃO: Altura fixa
+        btn_calculate.setFixedHeight(50)
         btn_calculate.clicked.connect(self._on_calculate)
-        layout.addWidget(btn_calculate)
+        panel_layout.addWidget(btn_calculate)
         
-        # Botão limpar - CORREÇÃO: Altura fixa definida programaticamente
-        btn_clear = QPushButton("Limpar Campos")
-        btn_clear.setObjectName("secondary")
-        btn_clear.setCursor(Qt.PointingHandCursor)
-        btn_clear.setFixedHeight(44)  # CORREÇÃO: Altura fixa
-        btn_clear.clicked.connect(self._on_clear)
-        layout.addWidget(btn_clear)
+        btn_reset = QPushButton("Resetar Valores")
+        btn_reset.setObjectName("secondary")
+        btn_reset.setCursor(Qt.PointingHandCursor)
+        btn_reset.setFixedHeight(46)
+        btn_reset.clicked.connect(self._on_reset)
+        panel_layout.addWidget(btn_reset)
         
-        layout.addStretch()
+        panel_layout.addStretch()
         
-        # Créditos
-        credits = QLabel("Desenvolvido com Python + PySide6")
-        credits.setObjectName("subtitle")
-        credits.setAlignment(Qt.AlignCenter)
-        layout.addWidget(credits)
-        
-        parent_layout.addWidget(sidebar)
+        layout.addWidget(panel)
     
-    def _create_input_field(
-        self, layout: QVBoxLayout, label_text: str, placeholder: str,
-        is_currency: bool = False, is_percent: bool = False, is_integer: bool = False
+    def _create_input(
+        self, layout: QVBoxLayout, label_text: str, 
+        placeholder: str, is_integer: bool = False
     ) -> QLineEdit:
         """Cria um campo de entrada com label."""
         label = QLabel(label_text)
-        label.setStyleSheet("font-size: 12px; margin-bottom: 2px;")
+        label.setObjectName("input_label")
         layout.addWidget(label)
         
         input_field = QLineEdit()
         input_field.setPlaceholderText(placeholder)
-        input_field.setFixedHeight(44)  # CORREÇÃO: Altura fixa para inputs
+        input_field.setFixedHeight(48)
         
-        # Validadores
         if is_integer:
             input_field.setValidator(QIntValidator(1, 100))
         else:
@@ -376,110 +179,202 @@ class MainWindow(QMainWindow):
         layout.addWidget(input_field)
         return input_field
     
-    def _create_dashboard(self, parent_layout: QHBoxLayout):
-        """Cria a área principal do dashboard."""
-        dashboard = QWidget()
-        layout = QVBoxLayout(dashboard)
-        layout.setSpacing(20)
-        layout.setContentsMargins(0, 0, 0, 0)
+    def _create_results_panel(self, layout: QHBoxLayout):
+        """Cria o painel de resultados (coluna direita)."""
+        panel = QFrame()
+        panel.setObjectName("results_panel")
         
-        # Cards de resumo (horizontal)
-        cards_layout = QHBoxLayout()
-        cards_layout.setSpacing(15)
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(25, 25, 25, 25)
+        panel_layout.setSpacing(18)
         
-        self.card_invested = SummaryCard(
-            "💰 TOTAL INVESTIDO", "R$ 0,00", "card_value"
-        )
-        self.card_interest = SummaryCard(
-            "📈 TOTAL EM JUROS", "R$ 0,00", "card_value_green"
-        )
-        self.card_final = SummaryCard(
-            "🏆 VALOR FINAL BRUTO", "R$ 0,00", "card_value_gold"
-        )
+        # Título
+        section_title = QLabel("Resumo dos Resultados")
+        section_title.setObjectName("section_title")
+        panel_layout.addWidget(section_title)
         
-        cards_layout.addWidget(self.card_invested)
-        cards_layout.addWidget(self.card_interest)
-        cards_layout.addWidget(self.card_final)
+        panel_layout.addSpacing(5)
         
-        layout.addLayout(cards_layout)
+        # Cards de resumo (grid 2x2)
+        cards_grid = QGridLayout()
+        cards_grid.setSpacing(15)
         
-        # Gráfico
-        self.chart = ChartCanvas()
-        self.chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.chart)
+        self.card_invested = SummaryCard("TOTAL INVESTIDO", "R$ 0,00", "invested")
+        self.card_interest = SummaryCard("LUCRO COM JUROS", "R$ 0,00", "interest")
+        self.card_final = SummaryCard("SALDO FINAL", "R$ 0,00", "final")
+        self.card_goal = GoalStatusCard()
         
-        parent_layout.addWidget(dashboard, stretch=1)
+        cards_grid.addWidget(self.card_invested, 0, 0)
+        cards_grid.addWidget(self.card_interest, 0, 1)
+        cards_grid.addWidget(self.card_final, 0, 2)
+        cards_grid.addWidget(self.card_goal, 1, 0)
+        
+        panel_layout.addLayout(cards_grid)
+        
+        panel_layout.addSpacing(10)
+        
+        # Box de análise
+        self.analysis_box = AnalysisBox()
+        panel_layout.addWidget(self.analysis_box)
+        
+        panel_layout.addStretch()
+        
+        layout.addWidget(panel, stretch=1)
     
-    def _parse_currency(self, text: str) -> float:
-        """Converte texto de moeda para float."""
-        # Remove caracteres não numéricos exceto vírgula e ponto
+    def _create_charts_section(self, layout: QVBoxLayout):
+        """Cria a seção de gráficos."""
+        charts_layout = QHBoxLayout()
+        charts_layout.setSpacing(25)
+        
+        # Gráfico de evolução (maior)
+        evolution_frame = QFrame()
+        evolution_frame.setObjectName("card")
+        evolution_layout = QVBoxLayout(evolution_frame)
+        evolution_layout.setContentsMargins(20, 20, 20, 20)
+        
+        evolution_title = QLabel("Evolução do Patrimônio")
+        evolution_title.setObjectName("section_title")
+        evolution_title.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        evolution_layout.addWidget(evolution_title)
+        
+        self.evolution_chart = EvolutionChart()
+        self.evolution_chart.setMinimumHeight(350)
+        evolution_layout.addWidget(self.evolution_chart)
+        
+        charts_layout.addWidget(evolution_frame, stretch=3)
+        
+        # Gráfico de composição (menor)
+        composition_frame = QFrame()
+        composition_frame.setObjectName("card")
+        composition_layout = QVBoxLayout(composition_frame)
+        composition_layout.setContentsMargins(20, 20, 20, 20)
+        
+        composition_title = QLabel("Composição do Saldo Final")
+        composition_title.setObjectName("section_title")
+        composition_title.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        composition_layout.addWidget(composition_title)
+        
+        self.composition_chart = CompositionChart()
+        self.composition_chart.setMinimumHeight(350)
+        composition_layout.addWidget(self.composition_chart)
+        
+        charts_layout.addWidget(composition_frame, stretch=2)
+        
+        layout.addLayout(charts_layout)
+    
+    def _create_projection_section(self, layout: QVBoxLayout):
+        """Cria a seção de projeção anual."""
+        projection_frame = QFrame()
+        projection_frame.setObjectName("card")
+        
+        projection_layout = QVBoxLayout(projection_frame)
+        projection_layout.setContentsMargins(20, 20, 20, 20)
+        projection_layout.setSpacing(15)
+        
+        # Título
+        title = QLabel("Projeção Anual")
+        title.setObjectName("section_title")
+        title.setStyleSheet("font-size: 18px; color: #16a085;")
+        projection_layout.addWidget(title)
+        
+        # Tabela
+        self.projection_table = ProjectionTable()
+        self.projection_table.setMinimumHeight(400)
+        projection_layout.addWidget(self.projection_table)
+        
+        layout.addWidget(projection_frame)
+    
+    def _parse_value(self, text: str) -> float:
+        """Converte texto para float."""
         clean = text.replace("R$", "").replace(" ", "").strip()
-        # Trata formato brasileiro (1.000,00) ou americano (1,000.00)
         if "," in clean and "." in clean:
             if clean.rfind(",") > clean.rfind("."):
-                # Formato brasileiro: 1.000,00
                 clean = clean.replace(".", "").replace(",", ".")
             else:
-                # Formato americano: 1,000.00
                 clean = clean.replace(",", "")
         elif "," in clean:
             clean = clean.replace(",", ".")
-        
         return float(clean) if clean else 0.0
     
     def _on_calculate(self):
-        """Executa o cálculo da simulação."""
+        """Executa a simulação."""
         try:
-            # Obtém os valores dos inputs
-            initial = self._parse_currency(self.input_initial.text())
-            monthly = self._parse_currency(self.input_monthly.text())
-            rate = self._parse_currency(self.input_rate.text())
+            # Obter valores
+            initial = self._parse_value(self.input_initial.text())
+            monthly = self._parse_value(self.input_monthly.text())
+            rate = self._parse_value(self.input_rate.text())
+            goal = self._parse_value(self.input_goal.text())
             years = int(self.input_years.text()) if self.input_years.text() else 0
             
-            # Validação básica
+            # Validação
             if years <= 0:
-                raise ValueError("O tempo deve ser maior que zero.")
+                raise ValueError("O período deve ser maior que zero.")
             if rate < 0:
-                raise ValueError("A taxa de juros não pode ser negativa.")
+                raise ValueError("A taxa não pode ser negativa.")
             
-            # Executa o cálculo
-            result = calculate_compound_interest(initial, monthly, rate, years)
+            # Calcular
+            result = calculate_compound_interest(
+                initial, monthly, rate, years, goal
+            )
             
-            # Atualiza os cards
+            # Atualizar cards
             self.card_invested.set_value(format_currency(result.total_invested))
             self.card_interest.set_value(format_currency(result.total_interest))
             self.card_final.set_value(format_currency(result.final_balance))
+            self.card_goal.update_status(
+                result.analysis.goal_achieved,
+                result.analysis.goal_percentage
+            )
             
-            # Cria linha do total investido para comparação no gráfico
-            import numpy as np
-            total_invested_line = initial + (monthly * result.months)
+            # Atualizar análise
+            self.analysis_box.update_analysis(result)
             
-            # Atualiza o gráfico
-            self.chart.update_chart(result.months, result.balances, total_invested_line)
+            # Atualizar gráficos
+            self.evolution_chart.update_chart(result)
+            self.composition_chart.update_chart(
+                result.total_invested, 
+                result.total_interest
+            )
+            
+            # Atualizar tabela
+            self.projection_table.update_data(result)
             
         except ValueError as e:
             QMessageBox.warning(
                 self, "Dados Inválidos",
-                f"Por favor, verifique os valores inseridos.\n\nErro: {str(e)}"
+                f"Por favor, verifique os valores.\n\nErro: {str(e)}"
             )
         except Exception as e:
             QMessageBox.critical(
                 self, "Erro",
-                f"Ocorreu um erro ao calcular.\n\nDetalhes: {str(e)}"
+                f"Erro ao calcular.\n\nDetalhes: {str(e)}"
             )
     
-    def _on_clear(self):
-        """Limpa todos os campos."""
+    def _on_reset(self):
+        """Reseta todos os valores."""
+        # Limpar inputs
         self.input_initial.clear()
         self.input_monthly.clear()
         self.input_rate.clear()
+        self.input_goal.clear()
         self.input_years.clear()
         
+        # Resetar cards
         self.card_invested.set_value("R$ 0,00")
         self.card_interest.set_value("R$ 0,00")
         self.card_final.set_value("R$ 0,00")
+        self.card_goal.status_label.setText("—")
+        self.card_goal.percent_label.setText("")
         
-        # Redesenha gráfico vazio
-        self.chart.axes.clear()
-        self.chart._setup_style()
-        self.chart._draw_empty_chart()
+        # Resetar análise
+        self.analysis_box.analysis_label.setText("")
+        
+        # Resetar gráficos
+        self.evolution_chart.axes.clear()
+        self.evolution_chart._draw_empty()
+        
+        self.composition_chart.axes.clear()
+        self.composition_chart._draw_empty()
+        
+        # Resetar tabela
+        self.projection_table.setRowCount(0)
