@@ -6,7 +6,7 @@ Interface moderna com tema claro para simulação de investimentos.
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QSizePolicy,
-    QScrollArea, QMessageBox, QSpacerItem
+    QScrollArea, QMessageBox, QSpacerItem, QFileDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDoubleValidator, QIntValidator, QFont
@@ -264,10 +264,40 @@ class MainWindow(QMainWindow):
         projection_layout.setContentsMargins(15, 15, 15, 15)
         projection_layout.setSpacing(10)
         
+        # Header com título e botão de exportar
+        header_layout = QHBoxLayout()
+        
         # Título
         title = QLabel("Projeção Anual")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #16a085;")
-        projection_layout.addWidget(title)
+        header_layout.addWidget(title)
+        
+        header_layout.addStretch()
+        
+        # Botão exportar CSV
+        btn_export = QPushButton("📥 Exportar CSV")
+        btn_export.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #1e8449;
+            }
+        """)
+        btn_export.setCursor(Qt.PointingHandCursor)
+        btn_export.clicked.connect(self._on_export_csv)
+        header_layout.addWidget(btn_export)
+        
+        projection_layout.addLayout(header_layout)
         
         # Tabela
         self.projection_table = ProjectionTable()
@@ -276,6 +306,35 @@ class MainWindow(QMainWindow):
         projection_layout.addWidget(self.projection_table)
         
         layout.addWidget(projection_frame)
+    
+    def _on_export_csv(self):
+        """Exporta os dados da tabela para CSV."""
+        if not self.projection_table.has_data():
+            QMessageBox.warning(
+                self, "Sem Dados",
+                "Execute uma simulação antes de exportar."
+            )
+            return
+        
+        # Abrir diálogo para salvar arquivo
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Projeção como CSV",
+            "projecao_investimento.csv",
+            "Arquivos CSV (*.csv)"
+        )
+        
+        if filepath:
+            if self.projection_table.export_to_csv(filepath):
+                QMessageBox.information(
+                    self, "Exportado",
+                    f"Dados exportados com sucesso para:\n{filepath}"
+                )
+            else:
+                QMessageBox.critical(
+                    self, "Erro",
+                    "Não foi possível exportar os dados."
+                )
     
     def _parse_value(self, text: str) -> float:
         """Converte texto para float."""
