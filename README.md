@@ -4,7 +4,7 @@ Uma aplicação desktop moderna para simulação de investimentos com juros comp
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License](https://img.shields.io/badge/License-ERASMO-yellow.svg)
 
 ## 📋 Funcionalidades
 
@@ -110,4 +110,4 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 ---
 
-**Desenvolvido com ❤️ em Python**
+**Desenvolvido em Python**
