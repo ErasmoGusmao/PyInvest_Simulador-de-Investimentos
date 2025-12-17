@@ -6,7 +6,7 @@ PyInvest - Simulador de Investimentos com Juros Compostos
 Uma aplicação desktop moderna para simulação de investimentos,
 desenvolvida com Python, PySide6 e Matplotlib.
 
-Autor: PyInvest Team
+Autor: Erasmo de Melo Gusmão
 Versão: 1.0.0
 """
 
