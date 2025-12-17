@@ -420,25 +420,35 @@ class ProjectionTable(QTableWidget):
             'Saldo Total (R$)', '% do Alvo'
         ])
         
+        # ========================================================
+        # ALINHAMENTO DOS CABEÇALHOS (programático)
+        # O QSS nem sempre aplica text-align no QHeaderView,
+        # então definimos via código para garantir.
+        # ========================================================
+        for col in range(self.columnCount()):
+            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
+            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.setHorizontalHeaderItem(col, header_item)
+        
         # Estilo
-        self.setAlternatingRowColors(True)
+        self.setAlternatingRowColors(False)  # Desabilitar alternância padrão
         self.setShowGrid(False)
         self.setSelectionBehavior(QTableWidget.SelectRows)
         self.verticalHeader().setVisible(False)
         
-        # Ajustar colunas
+        # Ajustar colunas - todas com Stretch para distribuição uniforme
         header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.Fixed)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
         
-        self.setColumnWidth(0, 80)
-        self.setColumnWidth(4, 100)
+        # Alinhamento padrão do header (fallback)
+        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         # Altura das linhas
-        self.verticalHeader().setDefaultSectionSize(45)
+        self.verticalHeader().setDefaultSectionSize(48)
         
         # Dados para exportação
         self._export_data = []
@@ -460,10 +470,14 @@ class ProjectionTable(QTableWidget):
                 '% do Alvo': proj.goal_percentage
             })
             
+            # Cor de fundo alternada (aplicada manualmente)
+            bg_color = QColor('#ffffff') if row % 2 == 0 else QColor('#f8fffe')
+            
             # Ano - alinhado à esquerda
             year_item = QTableWidgetItem(f"Ano {proj.year}")
             year_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             year_item.setForeground(QColor(colors['primary']))
+            year_item.setBackground(bg_color)
             font = year_item.font()
             font.setBold(True)
             year_item.setFont(font)
@@ -472,34 +486,33 @@ class ProjectionTable(QTableWidget):
             # Aportes acumulados - alinhado à esquerda
             contrib_item = QTableWidgetItem(format_currency(proj.accumulated_contribution))
             contrib_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            contrib_item.setBackground(bg_color)
             self.setItem(row, 1, contrib_item)
             
             # Juros acumulados - alinhado à esquerda
             interest_item = QTableWidgetItem(format_currency(proj.accumulated_interest))
             interest_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             interest_item.setForeground(QColor(colors['success']))
+            interest_item.setBackground(bg_color)
             self.setItem(row, 2, interest_item)
             
-            # Saldo total - alinhado à esquerda
+            # Saldo total - alinhado à esquerda com DESTAQUE
             balance_item = QTableWidgetItem(format_currency(proj.total_balance))
             balance_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            balance_item.setForeground(QColor(colors['info']))
+            balance_item.setForeground(QColor(colors['primary']))  # Cor verde-água
+            # Background com destaque suave na coluna de saldo
+            highlight_bg = QColor('#e8f6f3') if row % 2 == 0 else QColor('#dff0ed')
+            balance_item.setBackground(highlight_bg)
             font = balance_item.font()
             font.setBold(True)
             balance_item.setFont(font)
             self.setItem(row, 3, balance_item)
             
-            # % do alvo - alinhado ao centro
+            # % do alvo - alinhado à esquerda
             pct_item = QTableWidgetItem(f"{proj.goal_percentage:.1f}%")
-            pct_item.setTextAlignment(Qt.AlignCenter)
+            pct_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            pct_item.setBackground(bg_color)
             self.setItem(row, 4, pct_item)
-            
-            # Cor de fundo alternada
-            if row % 2 == 1:
-                for col in range(5):
-                    item = self.item(row, col)
-                    if item:
-                        item.setBackground(QColor('#f9fbfc'))
     
     def export_to_csv(self, filepath: str) -> bool:
         """
