@@ -15,7 +15,8 @@ from core.calculation import calculate_compound_interest, format_currency
 from ui.styles import get_style, get_colors
 from ui.widgets import (
     SummaryCard, GoalStatusCard, EvolutionChart, 
-    CompositionChart, ProjectionTable, AnalysisBox
+    CompositionChart, ProjectionTable, AnalysisBox,
+    SensitivityDashboard
 )
 
 
@@ -57,6 +58,9 @@ class MainWindow(QMainWindow):
         self._create_results_panel(content_layout)
         
         main_layout.addLayout(content_layout)
+        
+        # Seção de Sensibilidade (NOVA - após resultados)
+        self._create_sensitivity_section(main_layout)
         
         # Seção de gráficos (proporção 60/40)
         self._create_charts_section(main_layout)
@@ -211,6 +215,21 @@ class MainWindow(QMainWindow):
         panel_layout.addStretch()
         
         layout.addWidget(panel, stretch=1)
+    
+    def _create_sensitivity_section(self, layout: QVBoxLayout):
+        """Cria a seção do dashboard de sensibilidade."""
+        sensitivity_frame = QFrame()
+        sensitivity_frame.setObjectName("card")
+        
+        sensitivity_layout = QVBoxLayout(sensitivity_frame)
+        sensitivity_layout.setContentsMargins(20, 20, 20, 20)
+        sensitivity_layout.setSpacing(15)
+        
+        # Dashboard de Sensibilidade
+        self.sensitivity_dashboard = SensitivityDashboard()
+        sensitivity_layout.addWidget(self.sensitivity_dashboard)
+        
+        layout.addWidget(sensitivity_frame)
     
     def _create_charts_section(self, layout: QVBoxLayout):
         """Cria a seção de gráficos."""
@@ -381,6 +400,14 @@ class MainWindow(QMainWindow):
             # Atualizar análise
             self.analysis_box.update_analysis(result)
             
+            # Atualizar dashboard de sensibilidade
+            self.sensitivity_dashboard.update_sensitivities(
+                initial_amount=initial,
+                monthly_contribution=monthly,
+                annual_rate=rate,
+                years=years
+            )
+            
             # Atualizar gráficos
             self.evolution_chart.update_chart(result)
             self.composition_chart.update_chart(
@@ -420,6 +447,9 @@ class MainWindow(QMainWindow):
         
         # Resetar análise
         self.analysis_box.analysis_label.setText("")
+        
+        # Resetar dashboard de sensibilidade
+        self.sensitivity_dashboard.reset()
         
         # Resetar gráficos
         self.evolution_chart.axes.clear()

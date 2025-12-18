@@ -161,7 +161,7 @@ class EvolutionChart(FigureCanvas):
         if 0 <= year_idx < len(self.annual_data['years']):
             year = self.annual_data['years'][year_idx]
             balance = self.annual_data['balances'][year_idx]
-            invested = self.invested_data[year_idx] if self.invested_data is not None else 0
+            capital_no_contrib = self.invested_data[year_idx] if self.invested_data is not None else 0
             
             # Criar ou atualizar annotation
             if self.annotation is None:
@@ -182,12 +182,12 @@ class EvolutionChart(FigureCanvas):
             
             # Formatar texto do tooltip
             balance_fmt = f"R$ {balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            invested_fmt = f"R$ {invested:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            capital_fmt = f"R$ {capital_no_contrib:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             
             self.annotation.set_text(
                 f"Ano {year}\n"
                 f"Saldo Total: {balance_fmt}\n"
-                f"Investido: {invested_fmt}"
+                f"Sem Aportes: {capital_fmt}"
             )
             self.annotation.xy = (year, balance)
             self.annotation.set_visible(True)
@@ -205,10 +205,11 @@ class EvolutionChart(FigureCanvas):
         years = result.months / 12
         max_years = int(years[-1])
         
-        # Calcular linha de capital investido
+        # Calcular linha de capital inicial sem aportes (só juros compostos)
+        # Fórmula: M = C * (1 + i)^n onde i é a taxa mensal
         initial = result.analysis.initial_investment
-        monthly = result.analysis.monthly_contribution
-        invested_line = initial + (monthly * result.months)
+        monthly_rate = (1 + result.analysis.annual_rate / 100) ** (1/12) - 1
+        capital_without_contributions = initial * ((1 + monthly_rate) ** result.months)
         
         # Área preenchida para saldo total
         self.axes.fill_between(
@@ -220,14 +221,14 @@ class EvolutionChart(FigureCanvas):
         annual_indices = [i for i in range(len(result.months)) if i % 12 == 0]
         annual_years = [int(years[i]) for i in annual_indices]
         annual_balances = [result.balances[i] for i in annual_indices]
-        annual_invested = [invested_line[i] for i in annual_indices]
+        annual_capital_no_contrib = [capital_without_contributions[i] for i in annual_indices]
         
         # Guardar dados para tooltip
         self.annual_data = {
             'years': annual_years,
             'balances': annual_balances
         }
-        self.invested_data = annual_invested
+        self.invested_data = annual_capital_no_contrib
         
         # Linha do saldo total
         line1, = self.axes.plot(
@@ -243,11 +244,11 @@ class EvolutionChart(FigureCanvas):
             edgecolors='white', linewidths=1.5
         )
         
-        # Linha do capital investido (tracejada)
+        # Linha do capital inicial sem aportes (tracejada)
         line2, = self.axes.plot(
-            years, invested_line,
+            years, capital_without_contributions,
             color='#5d6d7e', linewidth=2, linestyle='--',
-            label='Capital Investido (R$)', alpha=0.8
+            label='Capital Inicial sem Aportes (R$)', alpha=0.8
         )
         
         # Legenda
@@ -629,3 +630,253 @@ class AnalysisBox(QFrame):
         lines.append(f"• Rentabilidade total: {a.total_return_percentage:.2f}%")
         
         self.analysis_label.setText("<br>".join(lines))
+
+
+# =============================================================================
+# SENSITIVITY DASHBOARD - Painel de Insights de Sensibilidade
+# =============================================================================
+
+class InsightCard(QFrame):
+    """Card individual de insight com borda colorida à esquerda."""
+    
+    # Cores para cada tipo de insight
+    COLORS = {
+        'tempo': '#8e44ad',      # Roxo
+        'aporte': '#00bcd4',     # Azul Cyan
+        'capital': '#4caf50',    # Verde Lima
+        'taxa': '#e74c3c'        # Vermelho Suave
+    }
+    
+    # Ícones Unicode para cada tipo
+    ICONS = {
+        'tempo': '⏱️',
+        'aporte': '💰',
+        'capital': '🏦',
+        'taxa': '📈'
+    }
+    
+    def __init__(self, card_type: str, title: str, description: str):
+        super().__init__()
+        
+        self.card_type = card_type
+        self.title_text = title
+        self.description_text = description
+        
+        color = self.COLORS.get(card_type, '#16a085')
+        icon = self.ICONS.get(card_type, '📊')
+        
+        # Estilo do card com borda esquerda colorida
+        self.setStyleSheet(f"""
+            InsightCard {{
+                background-color: #ffffff;
+                border: 1px solid #e8e8e8;
+                border-left: 5px solid {color};
+                border-radius: 8px;
+            }}
+            InsightCard:hover {{
+                background-color: #fafafa;
+                border-color: #d0d0d0;
+                border-left: 5px solid {color};
+            }}
+        """)
+        
+        self.setMinimumHeight(140)
+        self.setMaximumHeight(180)
+        
+        # Layout principal
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+        
+        # Header com ícone e título
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
+        
+        # Ícone
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet(f"""
+            font-size: 18px;
+            background: transparent;
+        """)
+        header_layout.addWidget(icon_label)
+        
+        # Título
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet(f"""
+            font-size: 12px;
+            font-weight: bold;
+            color: {color};
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: transparent;
+        """)
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        
+        layout.addLayout(header_layout)
+        
+        # Valor em destaque
+        self.value_label = QLabel("—")
+        self.value_label.setStyleSheet(f"""
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            background: transparent;
+            padding: 4px 0px;
+        """)
+        layout.addWidget(self.value_label)
+        
+        # Texto explicativo
+        self.desc_label = QLabel(description)
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setStyleSheet("""
+            font-size: 11px;
+            color: #7f8c8d;
+            line-height: 1.4;
+            background: transparent;
+        """)
+        layout.addWidget(self.desc_label)
+        
+        layout.addStretch()
+    
+    def set_value(self, value: str):
+        """Atualiza o valor exibido no card."""
+        self.value_label.setText(value)
+
+
+class SensitivityDashboard(QWidget):
+    """
+    Dashboard de sensibilidade com 4 cards de insights.
+    Exibe as derivadas parciais do montante de forma didática.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        
+        # Layout principal
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(12)
+        
+        # Título da seção
+        title = QLabel("📊 Insights de Sensibilidade")
+        title.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 5px 0px;
+            background: transparent;
+        """)
+        main_layout.addWidget(title)
+        
+        # Subtítulo explicativo
+        subtitle = QLabel("Como cada variável impacta seu patrimônio final")
+        subtitle.setStyleSheet("""
+            font-size: 12px;
+            color: #95a5a6;
+            margin-bottom: 8px;
+            background: transparent;
+        """)
+        main_layout.addWidget(subtitle)
+        
+        # Container dos cards com fundo suave
+        cards_container = QFrame()
+        cards_container.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                padding: 5px;
+            }
+        """)
+        
+        # Grid 2x2 para os cards
+        from PySide6.QtWidgets import QGridLayout
+        grid_layout = QGridLayout(cards_container)
+        grid_layout.setContentsMargins(12, 12, 12, 12)
+        grid_layout.setSpacing(12)
+        
+        # Card 1: Velocidade Atual (dM/dt) - Tempo
+        self.card_velocidade = InsightCard(
+            card_type='tempo',
+            title='Velocidade Atual',
+            description='Neste exato momento, seu patrimônio cresce essa quantia por ano, apenas pelos juros, sem você fazer nada.'
+        )
+        grid_layout.addWidget(self.card_velocidade, 0, 0)
+        
+        # Card 2: Potência do Aporte (dM/da) - Aporte
+        self.card_potencia = InsightCard(
+            card_type='aporte',
+            title='Potência do Aporte',
+            description='Para cada R$ 1,00 a mais que você aportar por ano, seu montante final aumenta este valor multiplicador.'
+        )
+        grid_layout.addWidget(self.card_potencia, 0, 1)
+        
+        # Card 3: Eficiência do Capital (dM/dC) - Capital
+        self.card_eficiencia = InsightCard(
+            card_type='capital',
+            title='Eficiência do Capital',
+            description='Cada R$ 1,00 que você investiu lá no início se multiplicou por este fator até o final do período.'
+        )
+        grid_layout.addWidget(self.card_eficiencia, 1, 0)
+        
+        # Card 4: Sensibilidade à Taxa (dM/di) - Taxa
+        self.card_taxa = InsightCard(
+            card_type='taxa',
+            title='Sensibilidade à Taxa',
+            description='Se você conseguir apenas 1% a mais de rentabilidade anual, seu saldo final aumentaria aproximadamente este valor.'
+        )
+        grid_layout.addWidget(self.card_taxa, 1, 1)
+        
+        main_layout.addWidget(cards_container)
+    
+    def update_sensitivities(
+        self, 
+        initial_amount: float,
+        monthly_contribution: float,
+        annual_rate: float,
+        years: int
+    ):
+        """
+        Atualiza os valores dos cards com base nos parâmetros.
+        
+        Args:
+            initial_amount: Capital inicial (R$)
+            monthly_contribution: Aporte mensal (R$)
+            annual_rate: Taxa anual (%)
+            years: Período em anos
+        """
+        from core.calculation import InvestmentCalculator
+        
+        # Calcular sensibilidades
+        calculator = InvestmentCalculator(
+            C=initial_amount,
+            i_anual=annual_rate,
+            t_anos=years,
+            a_mensal=monthly_contribution
+        )
+        
+        metrics = calculator.get_sensitivities()
+        
+        # Formatar e atualizar os valores
+        # Card 1: Velocidade - R$/ano
+        velocidade_fmt = f"R$ {metrics.velocidade:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " / ano"
+        self.card_velocidade.set_value(velocidade_fmt)
+        
+        # Card 2: Potência do Aporte - Multiplicador
+        self.card_potencia.set_value(f"x {metrics.potencia_aporte:.2f}")
+        
+        # Card 3: Eficiência do Capital - Multiplicador
+        self.card_eficiencia.set_value(f"x {metrics.eficiencia_capital:.2f}")
+        
+        # Card 4: Sensibilidade à Taxa - R$ por 1% de taxa
+        # Dividir por 100 para mostrar o impacto de 1% (não 100%)
+        sensib_1pct = metrics.sensibilidade_taxa / 100
+        sensib_fmt = f"R$ {sensib_1pct:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        self.card_taxa.set_value(sensib_fmt)
+    
+    def reset(self):
+        """Reseta todos os cards para o estado inicial."""
+        self.card_velocidade.set_value("—")
+        self.card_potencia.set_value("—")
+        self.card_eficiencia.set_value("—")
+        self.card_taxa.set_value("—")

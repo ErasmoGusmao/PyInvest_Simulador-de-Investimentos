@@ -164,3 +164,76 @@ def calculate_compound_interest(
 def format_currency(value: float) -> str:
     """Formata valor como moeda brasileira."""
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+# =============================================================================
+# ANÁLISE DE SENSIBILIDADE (Marginalidade)
+# =============================================================================
+
+import math
+
+@dataclass
+class SensitivityMetrics:
+    """Métricas de sensibilidade do investimento."""
+    velocidade: float           # dM/dt - R$/ano
+    potencia_aporte: float      # dM/da - Multiplicador
+    eficiencia_capital: float   # dM/dC - Multiplicador
+    sensibilidade_taxa: float   # dM/di - R$ por 1% de taxa
+
+
+class InvestmentCalculator:
+    """
+    Calculadora de sensibilidade para investimentos.
+    Calcula as derivadas parciais do montante em relação aos parâmetros.
+    """
+    
+    def __init__(self, C: float, i_anual: float, t_anos: float, a_mensal: float):
+        """
+        Args:
+            C: Capital inicial (R$)
+            i_anual: Taxa de juros anual (%)
+            t_anos: Tempo em anos
+            a_mensal: Aporte mensal (R$)
+        """
+        self.C = C
+        self.i = i_anual / 100.0  # Converte porcentagem para decimal
+        self.t = t_anos
+        self.a_anual = a_mensal * 12  # Aproximação para o modelo anualizado
+        
+        # Validação
+        if self.i <= 0:
+            self.i = 0.000001  # Evita divisão por zero
+
+    def calculate_total_amount(self) -> float:
+        """Calcula M (Montante)"""
+        juros_capital = self.C * math.pow(1 + self.i, self.t)
+        juros_aportes = self.a_anual * ((math.pow(1 + self.i, self.t) - 1) / self.i)
+        return juros_capital + juros_aportes
+
+    def get_sensitivities(self) -> SensitivityMetrics:
+        """Retorna todas as sensibilidades como dataclass."""
+        # Cálculos auxiliares
+        fator_acum = math.pow(1 + self.i, self.t)
+        ln_i = math.log(1 + self.i)
+        
+        # 1. Velocidade (dM/dt) - R$/ano no ano t
+        velocidade = ln_i * fator_acum * (self.C + (self.a_anual / self.i))
+        
+        # 2. Potência do Aporte (dM/da) - Multiplicador
+        potencia_aporte = (fator_acum - 1) / self.i
+        
+        # 3. Eficiência Capital (dM/dC)
+        eficiencia_cap = fator_acum
+        
+        # 4. Sensibilidade Taxa (dM/di)
+        termo_c = self.C * self.t * math.pow(1 + self.i, self.t - 1)
+        num_a = (self.t * self.i * math.pow(1 + self.i, self.t - 1)) - fator_acum + 1
+        termo_a = self.a_anual * (num_a / (self.i ** 2))
+        sensib_taxa = termo_c + termo_a
+
+        return SensitivityMetrics(
+            velocidade=velocidade,
+            potencia_aporte=potencia_aporte,
+            eficiencia_capital=eficiencia_cap,
+            sensibilidade_taxa=sensib_taxa
+        )
