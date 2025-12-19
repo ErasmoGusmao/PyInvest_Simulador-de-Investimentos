@@ -1,6 +1,7 @@
 """Módulo de interface gráfica do PyInvest."""
-from .window import MainWindow
-from .styles import get_style, get_colors
+from .window_modern import ModernMainWindow
+from .styles_modern import get_modern_style, get_colors, apply_shadow
+from .plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
 from .widgets import (
     SummaryCard, GoalStatusCard, EvolutionChart,
     CompositionChart, ProjectionTable, AnalysisBox,
@@ -9,9 +10,16 @@ from .widgets import (
 )
 
 __all__ = [
-    "MainWindow",
-    "get_style",
+    # Window
+    "ModernMainWindow",
+    # Styles
+    "get_modern_style",
     "get_colors",
+    "apply_shadow",
+    # Plotly Charts
+    "EvolutionChartPlotly",
+    "CompositionChartPlotly",
+    # Widgets
     "SummaryCard",
     "GoalStatusCard", 
     "EvolutionChart",

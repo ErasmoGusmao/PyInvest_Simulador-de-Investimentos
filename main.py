@@ -7,7 +7,7 @@ Uma aplicação desktop moderna para simulação de investimentos
 com análise probabilística Monte Carlo.
 
 Autor: PyInvest Team
-Versão: 2.0.0 (Monte Carlo Edition)
+Versão: 3.1.0 (Modern UI + Plotly Edition)
 """
 
 import sys
@@ -15,8 +15,8 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
-# Nova janela com Monte Carlo
-from ui.window_mc import MainWindow
+# Janela moderna com Plotly
+from ui.window_modern import ModernMainWindow
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
     app.setApplicationDisplayName("PyInvest - Simulador de Investimentos")
     
     # Cria e exibe a janela principal
-    window = MainWindow()
+    window = ModernMainWindow()
     window.show()
     
     # Inicia o loop de eventos

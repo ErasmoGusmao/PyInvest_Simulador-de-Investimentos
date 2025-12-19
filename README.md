@@ -1,11 +1,28 @@
 # 💰 PyInvest - Simulador de Investimentos
 
-Uma aplicação desktop moderna para simulação de investimentos com juros compostos e **análise probabilística Monte Carlo**, desenvolvida em Python com interface gráfica profissional.
+Uma aplicação desktop moderna para simulação de investimentos com juros compostos e **análise probabilística Monte Carlo**, desenvolvida em Python com interface gráfica profissional e gráficos interativos Plotly.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)
+![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Monte Carlo](https://img.shields.io/badge/Monte_Carlo-5000_cenários-orange.svg)
+
+## ✨ Novidades v3.1 (Modern UI + Plotly)
+
+### 🎨 Interface Moderna (Flat Design)
+- Cards brancos com sombras suaves e bordas arredondadas (16px)
+- Tipografia Segoe UI com hierarquia clara
+- Paleta de cores moderna (Emerald Green #10B981)
+- Inputs com altura confortável (40px) e bordas suaves
+- Botões com hover states e transições
+
+### 📊 Gráficos Plotly Interativos
+- **Hover Individual** (`hovermode='closest'`): tooltip apenas na curva apontada
+- **Túnel de Confiança**: área sombreada Min-Max com `fill='tonexty'`
+- **Linha Determinística**: sólida + marcadores (`mode='lines+markers'`)
+- **Linha Média MC**: tracejada (`dash='dash'`)
+- Renderizado em `QWebEngineView` para máxima interatividade
 
 ## 📋 Funcionalidades
 
@@ -138,8 +155,10 @@ python main.py
 |------------|--------|-----|
 | **Python** | 3.10+ | Linguagem base |
 | **PySide6** | 6.5+ | Interface gráfica (Qt) |
-| **Matplotlib** | 3.7+ | Gráficos interativos |
+| **PySide6-WebEngine** | 6.5+ | Renderização Plotly |
+| **Plotly** | 5.18+ | Gráficos interativos |
 | **NumPy** | 1.24+ | Monte Carlo vetorizado |
+| **Matplotlib** | 3.7+ | Gráficos legados (opcional) |
 
 ## 📝 Fórmulas
 
