@@ -3,7 +3,8 @@ from .window import MainWindow
 from .styles import get_style, get_colors
 from .widgets import (
     SummaryCard, GoalStatusCard, EvolutionChart,
-    CompositionChart, ProjectionTable, AnalysisBox
+    CompositionChart, ProjectionTable, AnalysisBox,
+    SensitivityDashboard, InsightCard
 )
 
 __all__ = [
@@ -15,5 +16,7 @@ __all__ = [
     "EvolutionChart",
     "CompositionChart",
     "ProjectionTable",
-    "AnalysisBox"
+    "AnalysisBox",
+    "SensitivityDashboard",
+    "InsightCard"
 ]

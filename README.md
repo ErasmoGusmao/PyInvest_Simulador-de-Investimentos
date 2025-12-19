@@ -13,17 +13,32 @@ Uma aplicação desktop moderna para simulação de investimentos com juros comp
 - ✅ Definição de meta/objetivo financeiro
 - ✅ Projeção de tempo para atingir a meta
 - ✅ Cálculo de rentabilidade total
+- ✅ **Análise de Sensibilidade** (derivadas parciais)
 
 ### Interface Moderna
 - ✅ Tema claro profissional (estilo dashboard web)
 - ✅ Cards coloridos de resumo (Total Investido, Lucro, Saldo Final)
 - ✅ Card de status da meta (Atingido/Não atingido)
-- ✅ Caixa de análise textual da simulação
+- ✅ Caixa de análise textual com destaque visual
+- ✅ **Dashboard de Sensibilidade** com 4 insights matemáticos
 
-### Visualizações
+### Visualizações Interativas
 - ✅ Gráfico de evolução patrimonial com marcadores anuais
+- ✅ Gráfico comparativo: Saldo Total vs Capital Inicial sem Aportes
 - ✅ Gráfico de rosca (donut) da composição do saldo
+- ✅ **Tooltips interativos** ao passar o mouse nos gráficos
 - ✅ Tabela detalhada de projeção anual
+- ✅ **Exportação para CSV** dos dados da tabela
+
+### Insights de Sensibilidade (Novo!)
+Dashboard educativo que explica matematicamente o poder do investimento:
+
+| Insight | Descrição | Fórmula |
+|---------|-----------|---------|
+| 🕐 **Velocidade Atual** | Quanto seu patrimônio cresce por ano neste momento | dM/dt |
+| 💰 **Potência do Aporte** | Multiplicador para cada R$1 aportado a mais | dM/da |
+| 🏦 **Eficiência do Capital** | Fator de multiplicação do capital inicial | dM/dC |
+| 📈 **Sensibilidade à Taxa** | Impacto de 1% a mais de rentabilidade | dM/di |
 
 ## 🗂️ Estrutura do Projeto
 
@@ -99,9 +114,14 @@ python main.py
 | Saldo Final | Azul | Patrimônio total acumulado |
 | Status da Meta | Laranja | Se a meta foi atingida e % alcançado |
 
-### Gráficos
-- **Evolução do Patrimônio**: Linha com área preenchida e marcadores nos pontos anuais
-- **Composição do Saldo**: Gráfico de rosca mostrando proporção Capital vs Juros
+### Gráficos Interativos
+- **Evolução do Patrimônio**: 
+  - Linha sólida: Saldo Total
+  - Linha tracejada: Capital Investido
+  - Tooltip ao passar o mouse mostrando valores
+- **Composição do Saldo**: 
+  - Gráfico de rosca mostrando proporção Capital vs Juros
+  - Tooltip com valores ao passar o mouse
 
 ### Tabela de Projeção
 Mostra ano a ano:
@@ -110,13 +130,15 @@ Mostra ano a ano:
 - Saldo total
 - Percentual da meta atingido
 
+**Botão "Exportar CSV"**: Salva os dados da tabela em formato CSV compatível com Excel.
+
 ## 🛠️ Tecnologias
 
 | Tecnologia | Versão | Uso |
 |------------|--------|-----|
 | **Python** | 3.10+ | Linguagem base |
 | **PySide6** | 6.5+ | Interface gráfica (Qt) |
-| **Matplotlib** | 3.7+ | Gráficos |
+| **Matplotlib** | 3.7+ | Gráficos interativos |
 | **NumPy** | 1.24+ | Cálculos vetoriais |
 
 ## 📝 Fórmula de Juros Compostos

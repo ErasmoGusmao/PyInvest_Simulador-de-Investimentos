@@ -102,7 +102,7 @@ class GoalStatusCard(QFrame):
 
 
 class EvolutionChart(FigureCanvas):
-    """Gráfico de evolução do patrimônio com interatividade."""
+    """Gráfico de evolução do patrimônio com tooltip inteligente."""
     
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(8, 4), facecolor='#ffffff', dpi=100)
@@ -115,12 +115,18 @@ class EvolutionChart(FigureCanvas):
         self.annual_data = None
         self.invested_data = None
         self.annotation = None
+        self.highlight_point = None  # Ponto de destaque ao hover
+        
+        # Configurações do tooltip
+        self.tooltip_offset = 12  # Distância do ponto em pixels
+        self.tooltip_margin = 10  # Margem das bordas do gráfico
         
         self._setup_style()
         self._draw_empty()
         
         # Conectar evento de movimento do mouse
         self.mpl_connect('motion_notify_event', self._on_hover)
+        self.mpl_connect('axes_leave_event', self._on_leave)
     
     def _setup_style(self):
         """Configura estilo do gráfico."""
@@ -143,61 +149,156 @@ class EvolutionChart(FigureCanvas):
         self.fig.tight_layout()
         self.draw()
     
+    def _on_leave(self, event):
+        """Handler quando o mouse sai do gráfico."""
+        if self.annotation:
+            self.annotation.set_visible(False)
+        if self.highlight_point:
+            self.highlight_point.set_visible(False)
+        self.draw_idle()
+    
+    def _calculate_smart_position(self, data_x, data_y):
+        """
+        Calcula posição inteligente do tooltip evitando cortes nas bordas.
+        
+        Returns:
+            tuple: (offset_x, offset_y, ha, va) para posicionamento
+        """
+        # Obter limites do gráfico em coordenadas de dados
+        xlim = self.axes.get_xlim()
+        ylim = self.axes.get_ylim()
+        
+        # Calcular posição relativa do ponto (0 a 1)
+        rel_x = (data_x - xlim[0]) / (xlim[1] - xlim[0])
+        rel_y = (data_y - ylim[0]) / (ylim[1] - ylim[0])
+        
+        # Offset base mais próximo do ponto
+        base_offset = 8
+        
+        # Determinar direção horizontal
+        if rel_x > 0.85:  # Ponto muito à direita
+            offset_x = -base_offset
+            ha = 'right'
+        elif rel_x < 0.15:  # Ponto muito à esquerda
+            offset_x = base_offset
+            ha = 'left'
+        else:  # Centro - tooltip centralizado acima
+            offset_x = 0
+            ha = 'center'
+        
+        # Determinar direção vertical - PREFERÊNCIA: ACIMA do ponto
+        if rel_y > 0.75:  # Ponto muito acima - tooltip abaixo
+            offset_y = -base_offset - 35
+            va = 'top'
+        else:  # Padrão: tooltip acima do ponto
+            offset_y = base_offset + 20
+            va = 'bottom'
+        
+        return offset_x, offset_y, ha, va
+    
+    def _format_currency_tooltip(self, value):
+        """Formata valor monetário para o tooltip."""
+        if value >= 1_000_000:
+            return f"R$ {value/1_000_000:,.2f}M".replace(",", "X").replace(".", ",").replace("X", ".")
+        elif value >= 1_000:
+            return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        else:
+            return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    
     def _on_hover(self, event):
-        """Handler para mostrar tooltip ao passar o mouse."""
+        """Handler para mostrar tooltip inteligente ao passar o mouse."""
         if event.inaxes != self.axes or self.annual_data is None:
             if self.annotation:
                 self.annotation.set_visible(False)
-                self.draw_idle()
+            if self.highlight_point:
+                self.highlight_point.set_visible(False)
+            self.draw_idle()
             return
         
         # Encontrar o ponto mais próximo
         x = event.xdata
         if x is None:
             return
-            
+        
         # Encontrar o ano mais próximo
         year_idx = int(round(x))
-        if 0 <= year_idx < len(self.annual_data['years']):
-            year = self.annual_data['years'][year_idx]
-            balance = self.annual_data['balances'][year_idx]
-            capital_no_contrib = self.invested_data[year_idx] if self.invested_data is not None else 0
-            
-            # Criar ou atualizar annotation
-            if self.annotation is None:
-                self.annotation = self.axes.annotate(
-                    '',
-                    xy=(0, 0),
-                    xytext=(15, 15),
-                    textcoords='offset points',
-                    bbox=dict(
-                        boxstyle='round,pad=0.5',
-                        facecolor='#2c3e50',
-                        edgecolor='none',
-                        alpha=0.9
-                    ),
-                    fontsize=9,
-                    color='white'
+        if not (0 <= year_idx < len(self.annual_data['years'])):
+            return
+        
+        year = self.annual_data['years'][year_idx]
+        balance = self.annual_data['balances'][year_idx]
+        
+        # Calcular posição inteligente do tooltip
+        offset_x, offset_y, ha, va = self._calculate_smart_position(year, balance)
+        
+        # Criar annotation se não existir
+        if self.annotation is None:
+            self.annotation = self.axes.annotate(
+                '',
+                xy=(0, 0),
+                xytext=(0, 0),
+                textcoords='offset points',
+                bbox=dict(
+                    boxstyle='round,pad=0.5,rounding_size=0.2',
+                    facecolor='#2c3e50',
+                    edgecolor='none',
+                    alpha=0.92
+                ),
+                fontsize=10,
+                fontweight='normal',
+                color='white',
+                zorder=1000,
+                # Seta minimalista integrada ao tooltip
+                arrowprops=dict(
+                    arrowstyle='wedge,tail_width=0.5,shrink_factor=0.5',
+                    facecolor='#2c3e50',
+                    edgecolor='none',
+                    alpha=0.92,
+                    shrinkA=0,
+                    shrinkB=8,
+                    patchA=None,
+                    mutation_scale=8
                 )
-            
-            # Formatar texto do tooltip
-            balance_fmt = f"R$ {balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            capital_fmt = f"R$ {capital_no_contrib:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            
-            self.annotation.set_text(
-                f"Ano {year}\n"
-                f"Saldo Total: {balance_fmt}\n"
-                f"Sem Aportes: {capital_fmt}"
             )
-            self.annotation.xy = (year, balance)
-            self.annotation.set_visible(True)
-            self.draw_idle()
+        
+        # Criar ponto de destaque se não existir
+        if self.highlight_point is None:
+            self.highlight_point, = self.axes.plot(
+                [], [], 'o',
+                markersize=12,
+                markerfacecolor='#16a085',
+                markeredgecolor='white',
+                markeredgewidth=2,
+                zorder=999,
+                visible=False
+            )
+        
+        # Formatar texto do tooltip
+        balance_fmt = self._format_currency_tooltip(balance)
+        
+        # Construir texto (apenas Saldo Total para ficar mais limpo)
+        tooltip_text = f"Ano {year}\nSaldo Total (R$): {balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        # Atualizar annotation
+        self.annotation.set_text(tooltip_text)
+        self.annotation.xy = (year, balance)
+        self.annotation.xyann = (offset_x, offset_y)
+        self.annotation.set_ha(ha)
+        self.annotation.set_va(va)
+        self.annotation.set_visible(True)
+        
+        # Atualizar ponto de destaque
+        self.highlight_point.set_data([year], [balance])
+        self.highlight_point.set_visible(True)
+        
+        self.draw_idle()
     
     def update_chart(self, result: SimulationResult):
         """Atualiza o gráfico com os dados da simulação."""
         self.axes.clear()
         self._setup_style()
         self.annotation = None
+        self.highlight_point = None  # Resetar ponto de destaque
         
         colors = get_colors()
         
@@ -347,21 +448,27 @@ class CompositionChart(FigureCanvas):
                         xy=(0, 0),
                         xytext=(0, 0),
                         bbox=dict(
-                            boxstyle='round,pad=0.5',
+                            boxstyle='round,pad=0.6,rounding_size=0.3',
                             facecolor='#2c3e50',
-                            edgecolor='none',
-                            alpha=0.9
+                            edgecolor='#1a252f',
+                            linewidth=1,
+                            alpha=0.95
                         ),
-                        fontsize=9,
+                        fontsize=10,
                         color='white',
                         ha='center',
-                        va='center'
+                        va='center',
+                        zorder=1000
                     )
                 
                 # Formatar valor
                 value_fmt = f"R$ {self.values[i]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 
-                self.annotation.set_text(f"{self.labels[i]}: {value_fmt}")
+                # Calcular percentual
+                total = sum(self.values)
+                percent = (self.values[i] / total * 100) if total > 0 else 0
+                
+                self.annotation.set_text(f"{self.labels[i]}\n{value_fmt}\n({percent:.1f}%)")
                 
                 # Posicionar no centro
                 self.annotation.xy = (0, 0)

@@ -231,14 +231,12 @@ QFrame#card_goal {
 /* --- Tabela --- */
 QTableWidget {
     background-color: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    gridline-color: #f0f0f0;
+    border: none;
     font-size: 13px;
 }
 
 QTableWidget::item {
-    padding: 12px 8px;
+    padding: 12px 20px;
     border-bottom: 1px solid #f0f0f0;
 }
 
@@ -248,14 +246,14 @@ QTableWidget::item:selected {
 }
 
 QHeaderView::section {
-    background-color: #f8f9fa;
+    background-color: #ffffff;
     color: #7f8c8d;
-    font-weight: bold;
-    font-size: 11px;
-    text-transform: uppercase;
-    padding: 12px 8px;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 14px 20px;
     border: none;
-    border-bottom: 2px solid #e0e0e0;
+    border-bottom: 1px solid #e0e0e0;
+    text-align: left;
 }
 
 /* --- Análise Box --- */

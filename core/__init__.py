@@ -4,7 +4,9 @@ from .calculation import (
     format_currency, 
     SimulationResult,
     SimulationAnalysis,
-    YearlyProjection
+    YearlyProjection,
+    InvestmentCalculator,
+    SensitivityMetrics
 )
 
 __all__ = [
@@ -12,5 +14,7 @@ __all__ = [
     "format_currency", 
     "SimulationResult",
     "SimulationAnalysis",
-    "YearlyProjection"
+    "YearlyProjection",
+    "InvestmentCalculator",
+    "SensitivityMetrics"
 ]
