@@ -3,22 +3,29 @@
 PyInvest - Simulador de Investimentos com Juros Compostos
 =========================================================
 
-Uma aplicação desktop moderna para simulação de investimentos,
-desenvolvida com Python, PySide6 e Matplotlib.
+Uma aplicação desktop moderna para simulação de investimentos
+com análise probabilística Monte Carlo.
 
 Autor: PyInvest Team
-Versão: 1.0.0
+Versão: 2.0.0 (Monte Carlo Edition)
 """
 
 import sys
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt
 
-from ui.window import MainWindow
+# Nova janela com Monte Carlo
+from ui.window_mc import MainWindow
 
 
 def main():
     """Função principal que inicializa a aplicação."""
+    # Configurar DPI alto
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    
     # Cria a aplicação Qt
     app = QApplication(sys.argv)
     
@@ -26,7 +33,7 @@ def main():
     font = QFont("Segoe UI", 10)
     app.setFont(font)
     
-    # Nome da aplicação (aparece em alguns ambientes)
+    # Nome da aplicação
     app.setApplicationName("PyInvest")
     app.setApplicationDisplayName("PyInvest - Simulador de Investimentos")
     

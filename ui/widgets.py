@@ -6,17 +6,201 @@ Componentes reutilizáveis da interface.
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, 
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QWidget, QSizePolicy
+    QWidget, QSizePolicy, QLineEdit, QGridLayout,
+    QSpinBox, QGroupBox
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QDoubleValidator
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+import numpy as np
 
 from core.calculation import format_currency, SimulationResult
+from core.monte_carlo import MonteCarloResult, ParameterRange, YearlyProjectionMC
 from ui.styles import get_colors
+
+
+# =============================================================================
+# WIDGET DE PARÂMETRO COM RANGE (Min/Det/Max)
+# =============================================================================
+
+class RangeParameterInput(QFrame):
+    """
+    Widget para entrada de parâmetro com range de incerteza.
+    Contém 3 campos: Mínimo, Determinístico, Máximo.
+    """
+    
+    valueChanged = Signal()  # Emitido quando qualquer valor muda
+    
+    def __init__(self, label: str, suffix: str = "", decimals: int = 2, parent=None):
+        super().__init__(parent)
+        
+        self.label_text = label
+        self.suffix = suffix
+        self.decimals = decimals
+        
+        self._setup_ui()
+        self._setup_style()
+    
+    def _setup_ui(self):
+        """Configura a interface do widget."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 10)
+        layout.setSpacing(6)
+        
+        # Label principal
+        title = QLabel(self.label_text)
+        title.setStyleSheet("""
+            font-size: 13px;
+            font-weight: 500;
+            color: #2c3e50;
+        """)
+        layout.addWidget(title)
+        
+        # Grid para os 3 campos
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        
+        # Campo Mínimo
+        min_label = QLabel("Mín")
+        min_label.setStyleSheet("font-size: 10px; color: #7f8c8d;")
+        self.input_min = QLineEdit()
+        self.input_min.setPlaceholderText("Mínimo")
+        self.input_min.textChanged.connect(self._on_value_changed)
+        
+        # Campo Determinístico (central, destacado)
+        det_label = QLabel("Base")
+        det_label.setStyleSheet("font-size: 10px; color: #16a085; font-weight: bold;")
+        self.input_det = QLineEdit()
+        self.input_det.setPlaceholderText("Valor Base")
+        self.input_det.textChanged.connect(self._on_value_changed)
+        
+        # Campo Máximo
+        max_label = QLabel("Máx")
+        max_label.setStyleSheet("font-size: 10px; color: #7f8c8d;")
+        self.input_max = QLineEdit()
+        self.input_max.setPlaceholderText("Máximo")
+        self.input_max.textChanged.connect(self._on_value_changed)
+        
+        # Adicionar ao grid
+        grid.addWidget(min_label, 0, 0)
+        grid.addWidget(det_label, 0, 1)
+        grid.addWidget(max_label, 0, 2)
+        grid.addWidget(self.input_min, 1, 0)
+        grid.addWidget(self.input_det, 1, 1)
+        grid.addWidget(self.input_max, 1, 2)
+        
+        layout.addLayout(grid)
+        
+        # Sufixo (se houver)
+        if self.suffix:
+            suffix_label = QLabel(self.suffix)
+            suffix_label.setStyleSheet("font-size: 10px; color: #95a5a6; margin-top: -5px;")
+            layout.addWidget(suffix_label)
+    
+    def _setup_style(self):
+        """Configura estilos dos campos."""
+        base_style = """
+            QLineEdit {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 13px;
+                color: #2c3e50;
+            }
+            QLineEdit:focus {
+                border-color: #16a085;
+            }
+            QLineEdit::placeholder {
+                color: #bdc3c7;
+            }
+        """
+        
+        self.input_min.setStyleSheet(base_style)
+        self.input_max.setStyleSheet(base_style)
+        
+        # Campo determinístico com destaque
+        det_style = """
+            QLineEdit {
+                background-color: #f0fdf9;
+                border: 2px solid #16a085;
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 13px;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            QLineEdit:focus {
+                border-color: #0d7d6c;
+                background-color: #e8faf5;
+            }
+            QLineEdit::placeholder {
+                color: #7fb8ac;
+                font-weight: normal;
+            }
+        """
+        self.input_det.setStyleSheet(det_style)
+    
+    def _on_value_changed(self):
+        """Handler para mudança de valor."""
+        self.valueChanged.emit()
+    
+    def _parse_value(self, text: str) -> float:
+        """Converte texto para float."""
+        if not text.strip():
+            return None
+        clean = text.replace("R$", "").replace("%", "").replace(" ", "").strip()
+        if "," in clean and "." in clean:
+            if clean.rfind(",") > clean.rfind("."):
+                clean = clean.replace(".", "").replace(",", ".")
+            else:
+                clean = clean.replace(",", "")
+        elif "," in clean:
+            clean = clean.replace(",", ".")
+        try:
+            return float(clean)
+        except ValueError:
+            return None
+    
+    def get_parameter_range(self) -> ParameterRange:
+        """
+        Retorna um ParameterRange com os valores atuais.
+        """
+        return ParameterRange(
+            min_value=self._parse_value(self.input_min.text()),
+            deterministic=self._parse_value(self.input_det.text()),
+            max_value=self._parse_value(self.input_max.text())
+        )
+    
+    def get_deterministic_value(self) -> float:
+        """Retorna apenas o valor determinístico (ou 0 se vazio)."""
+        val = self._parse_value(self.input_det.text())
+        return val if val is not None else 0.0
+    
+    def set_values(self, min_val=None, det_val=None, max_val=None):
+        """Define os valores dos campos."""
+        if min_val is not None:
+            self.input_min.setText(str(min_val))
+        if det_val is not None:
+            self.input_det.setText(str(det_val))
+        if max_val is not None:
+            self.input_max.setText(str(max_val))
+    
+    def clear(self):
+        """Limpa todos os campos."""
+        self.input_min.clear()
+        self.input_det.clear()
+        self.input_max.clear()
+    
+    def is_probabilistic(self) -> bool:
+        """Verifica se tem valores min/max preenchidos."""
+        return (
+            self._parse_value(self.input_min.text()) is not None and
+            self._parse_value(self.input_max.text()) is not None
+        )
 
 
 class SummaryCard(QFrame):
@@ -394,6 +578,131 @@ class EvolutionChart(FigureCanvas):
         
         self.fig.tight_layout(pad=1.5)
         self.draw()
+    
+    def update_chart_monte_carlo(self, result: MonteCarloResult):
+        """
+        Atualiza o gráfico com dados de Monte Carlo.
+        Mostra túnel de confiança, média probabilística e linha determinística.
+        """
+        self.axes.clear()
+        self._setup_style()
+        self.annotation = None
+        self.highlight_point = None
+        
+        colors = get_colors()
+        
+        # Converter meses para anos
+        years = result.months / 12
+        max_years = int(years[-1])
+        
+        # === CAMADA 1: Túnel de Confiança (Monte Carlo) ===
+        if result.has_monte_carlo:
+            # Área entre P10 e P90 (túnel interno mais escuro)
+            self.axes.fill_between(
+                years, result.balances_p10, result.balances_p90,
+                alpha=0.25, color='#3498db',
+                label='Intervalo 80% (P10-P90)'
+            )
+            
+            # Área entre Min e Max (túnel externo mais claro)
+            self.axes.fill_between(
+                years, result.balances_min, result.balances_max,
+                alpha=0.10, color='#2980b9',
+                label='Intervalo Total (Min-Max)'
+            )
+            
+            # Bordas do túnel (linhas finas)
+            self.axes.plot(
+                years, result.balances_min,
+                color='#3498db', linewidth=0.8, linestyle='-', alpha=0.5
+            )
+            self.axes.plot(
+                years, result.balances_max,
+                color='#3498db', linewidth=0.8, linestyle='-', alpha=0.5
+            )
+            
+            # === CAMADA 2: Média Monte Carlo (tracejada) ===
+            self.axes.plot(
+                years, result.balances_mean,
+                color='#e74c3c', linewidth=2.5, linestyle='--',
+                label=f'Média Simulação ({result.n_simulations:,} cenários)'
+            )
+        
+        # === CAMADA 3: Linha Determinística (sólida com marcadores) ===
+        # Pontos anuais
+        annual_indices = [i for i in range(len(result.months)) if i % 12 == 0]
+        annual_years = [int(years[i]) for i in annual_indices]
+        annual_balances_det = [result.balances_deterministic[i] for i in annual_indices]
+        
+        # Guardar dados para tooltip
+        self.annual_data = {
+            'years': annual_years,
+            'balances': annual_balances_det
+        }
+        
+        # Se tiver Monte Carlo, adicionar dados extras ao tooltip
+        if result.has_monte_carlo:
+            self.annual_data['balances_mean'] = [result.balances_mean[i] for i in annual_indices]
+            self.annual_data['balances_min'] = [result.balances_min[i] for i in annual_indices]
+            self.annual_data['balances_max'] = [result.balances_max[i] for i in annual_indices]
+        
+        # Linha determinística
+        self.axes.plot(
+            years, result.balances_deterministic,
+            color=colors['primary'], linewidth=3,
+            label='Cenário Base (Determinístico)', solid_capstyle='round'
+        )
+        
+        # Marcadores nos pontos anuais
+        self.axes.scatter(
+            annual_years, annual_balances_det,
+            color=colors['primary'], s=50, zorder=10,
+            edgecolors='white', linewidths=2
+        )
+        
+        # === Legenda ===
+        self.axes.legend(
+            loc='upper left',
+            frameon=True,
+            facecolor='white',
+            edgecolor='#e0e0e0',
+            fontsize=8,
+            framealpha=0.95
+        )
+        
+        # === Formatação dos Eixos ===
+        def format_currency_axis(x, p):
+            if x >= 1000000:
+                return f'R$ {x/1000000:.1f}M'
+            elif x >= 1000:
+                return f'R$ {x/1000:.0f}k'
+            else:
+                return f'R$ {x:.0f}'
+        
+        self.axes.yaxis.set_major_formatter(format_currency_axis)
+        
+        # Eixo X
+        if max_years <= 10:
+            tick_interval = 1
+        elif max_years <= 20:
+            tick_interval = 2
+        elif max_years <= 30:
+            tick_interval = 5
+        else:
+            tick_interval = 10
+        
+        tick_positions = list(range(0, max_years + 1, tick_interval))
+        if max_years not in tick_positions:
+            tick_positions.append(max_years)
+        
+        self.axes.set_xticks(tick_positions)
+        self.axes.set_xticklabels([f'Ano {i}' for i in tick_positions], fontsize=8)
+        
+        if max_years > 15:
+            self.axes.tick_params(axis='x', rotation=45)
+        
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
 
 
 class CompositionChart(FigureCanvas):
@@ -662,6 +971,110 @@ class ProjectionTable(QTableWidget):
     def has_data(self) -> bool:
         """Verifica se há dados para exportar."""
         return len(self._export_data) > 0
+    
+    def update_data_monte_carlo(self, result: MonteCarloResult):
+        """Atualiza a tabela com dados de Monte Carlo expandidos."""
+        colors = get_colors()
+        
+        # Reconfigurar colunas para Monte Carlo
+        self.setColumnCount(6)
+        self.setHorizontalHeaderLabels([
+            'Ano', 'Total Investido', 'Saldo (Det.)', 
+            'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+        ])
+        
+        # Reconfigurar header
+        for col in range(self.columnCount()):
+            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
+            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.setHorizontalHeaderItem(col, header_item)
+        
+        header = self.horizontalHeader()
+        for col in range(6):
+            header.setSectionResizeMode(col, QHeaderView.Stretch)
+        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        
+        self.setRowCount(len(result.yearly_projection))
+        self._export_data = []
+        
+        for row, proj in enumerate(result.yearly_projection):
+            # Guardar dados para exportação
+            self._export_data.append({
+                'Ano': proj.year,
+                'Total Investido': proj.total_invested,
+                'Saldo (Det.)': proj.balance_deterministic,
+                'Saldo (Média)': proj.balance_mean,
+                'Saldo (Mín)': proj.balance_min,
+                'Saldo (Máx)': proj.balance_max
+            })
+            
+            bg_color = QColor('#ffffff') if row % 2 == 0 else QColor('#f8fffe')
+            
+            # Ano
+            year_item = QTableWidgetItem(f"Ano {proj.year}")
+            year_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            year_item.setForeground(QColor(colors['primary']))
+            year_item.setBackground(bg_color)
+            font = year_item.font()
+            font.setBold(True)
+            year_item.setFont(font)
+            self.setItem(row, 0, year_item)
+            
+            # Total Investido
+            invested_item = QTableWidgetItem(format_currency(proj.total_invested))
+            invested_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            invested_item.setBackground(bg_color)
+            self.setItem(row, 1, invested_item)
+            
+            # Saldo Determinístico (destacado)
+            det_item = QTableWidgetItem(format_currency(proj.balance_deterministic))
+            det_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            det_item.setForeground(QColor(colors['primary']))
+            highlight_bg = QColor('#e8f6f3') if row % 2 == 0 else QColor('#dff0ed')
+            det_item.setBackground(highlight_bg)
+            font = det_item.font()
+            font.setBold(True)
+            det_item.setFont(font)
+            self.setItem(row, 2, det_item)
+            
+            # Saldo Média (vermelho suave)
+            mean_item = QTableWidgetItem(format_currency(proj.balance_mean))
+            mean_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            mean_item.setForeground(QColor('#e74c3c'))
+            mean_item.setBackground(bg_color)
+            self.setItem(row, 3, mean_item)
+            
+            # Saldo Mínimo
+            min_item = QTableWidgetItem(format_currency(proj.balance_min))
+            min_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            min_item.setForeground(QColor('#7f8c8d'))
+            min_item.setBackground(bg_color)
+            self.setItem(row, 4, min_item)
+            
+            # Saldo Máximo
+            max_item = QTableWidgetItem(format_currency(proj.balance_max))
+            max_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            max_item.setForeground(QColor('#3498db'))
+            max_item.setBackground(bg_color)
+            self.setItem(row, 5, max_item)
+    
+    def reset_columns(self):
+        """Reseta para configuração original (5 colunas)."""
+        self.setColumnCount(5)
+        self.setHorizontalHeaderLabels([
+            'Ano', 'Aportes Acum. (R$)', 'Juros Acum. (R$)', 
+            'Saldo Total (R$)', '% do Alvo'
+        ])
+        
+        for col in range(self.columnCount()):
+            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
+            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.setHorizontalHeaderItem(col, header_item)
+        
+        header = self.horizontalHeader()
+        for col in range(5):
+            header.setSectionResizeMode(col, QHeaderView.Stretch)
+        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
 
 class AnalysisBox(QFrame):
