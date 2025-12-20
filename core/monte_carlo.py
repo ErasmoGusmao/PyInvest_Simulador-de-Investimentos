@@ -192,6 +192,8 @@ class YearlyProjectionMC:
     balance_max: float
     balance_p10: float  # Percentil 10
     balance_p90: float  # Percentil 90
+    balance_p2_5: float = 0.0   # Percentil 2.5 (IC 95% inferior)
+    balance_p97_5: float = 0.0  # Percentil 97.5 (IC 95% superior)
 
 
 @dataclass
@@ -217,6 +219,10 @@ class MonteCarloResult:
     final_balance_mean: float
     final_balance_min: float
     final_balance_max: float
+    
+    # Campos com valores padrão (devem vir por último)
+    balances_p2_5: np.ndarray = field(default_factory=lambda: np.array([]))   # IC 95% inferior
+    balances_p97_5: np.ndarray = field(default_factory=lambda: np.array([]))  # IC 95% superior
     
     # Projeção anual
     yearly_projection: List[YearlyProjectionMC] = field(default_factory=list)
@@ -342,6 +348,10 @@ class MonteCarloEngine:
             balances_p10 = np.percentile(all_balances, 10, axis=0)
             balances_p90 = np.percentile(all_balances, 90, axis=0)
             
+            # IC 95% (Percentis 2.5 e 97.5)
+            balances_p2_5 = np.percentile(all_balances, 2.5, axis=0)
+            balances_p97_5 = np.percentile(all_balances, 97.5, axis=0)
+            
             final_balance_mean = balances_mean[-1]
             final_balance_min = balances_min[-1]
             final_balance_max = balances_max[-1]
@@ -352,6 +362,8 @@ class MonteCarloEngine:
             balances_max = balances_det.copy()
             balances_p10 = balances_det.copy()
             balances_p90 = balances_det.copy()
+            balances_p2_5 = balances_det.copy()
+            balances_p97_5 = balances_det.copy()
             
             final_balance_mean = final_balance_det
             final_balance_min = final_balance_det
@@ -371,7 +383,9 @@ class MonteCarloEngine:
                 balance_min=balances_min[month_idx],
                 balance_max=balances_max[month_idx],
                 balance_p10=balances_p10[month_idx],
-                balance_p90=balances_p90[month_idx]
+                balance_p90=balances_p90[month_idx],
+                balance_p2_5=balances_p2_5[month_idx],
+                balance_p97_5=balances_p97_5[month_idx]
             ))
         
         # Parâmetros usados
@@ -392,6 +406,8 @@ class MonteCarloEngine:
             balances_max=balances_max,
             balances_p10=balances_p10,
             balances_p90=balances_p90,
+            balances_p2_5=balances_p2_5,
+            balances_p97_5=balances_p97_5,
             total_invested=total_invested,
             total_interest_det=total_interest_det,
             final_balance_det=final_balance_det,

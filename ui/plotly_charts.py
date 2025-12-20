@@ -87,6 +87,7 @@ class EvolutionChartPlotly(PlotlyChartWidget):
     """
     Gráfico de evolução do patrimônio com Plotly.
     Mostra túnel de confiança Monte Carlo e linhas determinística/média.
+    Inclui IC 95% e spikelines para análise precisa.
     """
     
     def __init__(self, parent=None):
@@ -109,10 +110,11 @@ class EvolutionChartPlotly(PlotlyChartWidget):
         # Cores
         color_primary = '#10B981'      # Verde (determinístico)
         color_mean = '#EF4444'         # Vermelho (média MC)
-        color_tunnel = 'rgba(59, 130, 246, 0.15)'  # Azul transparente
+        color_tunnel_outer = 'rgba(59, 130, 246, 0.08)'   # Min-Max (azul muito claro)
+        color_tunnel_ic95 = 'rgba(59, 130, 246, 0.18)'    # IC 95% (azul médio)
         color_tunnel_border = 'rgba(59, 130, 246, 0.4)'
         
-        # === CAMADA 1: Túnel de Confiança (Min-Max) ===
+        # === CAMADA 1: Túnel Total (Min-Max) - mais externo ===
         if result.has_monte_carlo:
             # Área superior (invisível, define o topo)
             fig.add_trace(go.Scatter(
@@ -132,34 +134,57 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 mode='lines',
                 line=dict(width=0),
                 fill='tonexty',
-                fillcolor=color_tunnel,
+                fillcolor=color_tunnel_outer,
                 showlegend=True,
-                name='Intervalo Min-Max',
+                name='Intervalo Total (Min-Max)',
                 hoverinfo='skip'
             ))
             
-            # Bordas do túnel (linhas finas)
+            # === CAMADA 2: Intervalo de Confiança 95% (P2.5 - P97.5) ===
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_max,
+                y=result.balances_p97_5,
                 mode='lines',
-                line=dict(color=color_tunnel_border, width=1, dash='dot'),
+                line=dict(width=0),
                 showlegend=False,
-                hovertemplate='Máximo: R$ %{y:,.2f}<extra></extra>',
-                name='Máximo'
+                hoverinfo='skip',
+                name='_p97_5'
             ))
             
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_min,
+                y=result.balances_p2_5,
+                mode='lines',
+                line=dict(width=0),
+                fill='tonexty',
+                fillcolor=color_tunnel_ic95,
+                showlegend=True,
+                name='Intervalo de Confiança 95%',
+                hoverinfo='skip'
+            ))
+            
+            # Bordas do túnel IC 95% (linhas finas tracejadas)
+            fig.add_trace(go.Scatter(
+                x=years,
+                y=result.balances_p97_5,
                 mode='lines',
                 line=dict(color=color_tunnel_border, width=1, dash='dot'),
                 showlegend=False,
-                hovertemplate='Mínimo: R$ %{y:,.2f}<extra></extra>',
-                name='Mínimo'
+                hovertemplate='P97.5: R$ %{y:,.2f}<extra></extra>',
+                name='P97.5'
             ))
             
-            # === CAMADA 2: Linha Média Monte Carlo (tracejada) ===
+            fig.add_trace(go.Scatter(
+                x=years,
+                y=result.balances_p2_5,
+                mode='lines',
+                line=dict(color=color_tunnel_border, width=1, dash='dot'),
+                showlegend=False,
+                hovertemplate='P2.5: R$ %{y:,.2f}<extra></extra>',
+                name='P2.5'
+            ))
+            
+            # === CAMADA 3: Linha Média Monte Carlo (tracejada) ===
             fig.add_trace(go.Scatter(
                 x=years,
                 y=result.balances_mean,
@@ -170,10 +195,10 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                     dash='dash'
                 ),
                 name=f'Média ({result.n_simulations:,} cenários)',
-                hovertemplate='<b>Ano %{x:.0f}</b><br>Média: R$ %{y:,.2f}<extra></extra>'
+                hovertemplate='<b>Ano %{x:.1f}</b><br>Média: R$ %{y:,.2f}<extra></extra>'
             ))
         
-        # === CAMADA 3: Linha Determinística (sólida com marcadores) ===
+        # === CAMADA 4: Linha Determinística (sólida com marcadores) ===
         # Pontos anuais
         annual_indices = [i for i in range(len(result.months)) if i % 12 == 0]
         annual_years = [years[i] for i in annual_indices]
@@ -203,11 +228,11 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 color=color_primary,
                 line=dict(color='white', width=2)
             ),
-            name='Cenário Base',
+            name='Cenário Base (Determinístico)',
             hovertemplate='<b>Ano %{x:.0f}</b><br>Saldo: R$ %{y:,.2f}<extra></extra>'
         ))
         
-        # === Layout (SINTAXE MODERNA - sem titlefont) ===
+        # === Layout com Spikelines ===
         fig.update_layout(
             # Geral
             title=None,
@@ -221,7 +246,7 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 bgcolor='rgba(255,255,255,0.9)',
                 bordercolor='#E5E7EB',
                 borderwidth=1,
-                font=dict(size=12)
+                font=dict(size=11)
             ),
             
             # Fundo
@@ -229,9 +254,9 @@ class EvolutionChartPlotly(PlotlyChartWidget):
             plot_bgcolor='white',
             
             # Margens
-            margin=dict(l=80, r=30, t=50, b=60),
+            margin=dict(l=80, r=30, t=60, b=60),
             
-            # Hover
+            # Hover com Spikelines
             hovermode='closest',
             hoverlabel=dict(
                 bgcolor='#1F2937',
@@ -243,10 +268,10 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 bordercolor='#1F2937'
             ),
             
-            # Eixo X - SINTAXE CORRETA
+            # Eixo X com Spikelines
             xaxis=dict(
                 title=dict(
-                    text='Período',
+                    text='Período (Anos)',
                     font=dict(size=13, color='#6B7280')
                 ),
                 tickfont=dict(size=11, color='#6B7280'),
@@ -258,10 +283,17 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 zeroline=False,
                 showline=True,
                 linecolor='#E5E7EB',
-                linewidth=1
+                linewidth=1,
+                # Spikelines verticais
+                showspikes=True,
+                spikemode='across',
+                spikesnap='cursor',
+                spikethickness=1,
+                spikecolor='#9CA3AF',
+                spikedash='dash'
             ),
             
-            # Eixo Y - SINTAXE CORRETA
+            # Eixo Y com Spikelines
             yaxis=dict(
                 title=dict(
                     text='Patrimônio (R$)',
@@ -277,7 +309,14 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 showline=True,
                 linecolor='#E5E7EB',
                 linewidth=1,
-                rangemode='tozero'
+                rangemode='tozero',
+                # Spikelines horizontais
+                showspikes=True,
+                spikemode='across',
+                spikesnap='cursor',
+                spikethickness=1,
+                spikecolor='#9CA3AF',
+                spikedash='dash'
             )
         )
         

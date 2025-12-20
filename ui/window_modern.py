@@ -703,26 +703,129 @@ class ModernMainWindow(QMainWindow):
         self.projection_table.update_data_monte_carlo(result)
     
     def _update_analysis_text(self, result: MonteCarloResult):
-        """Atualiza o texto de análise."""
+        """Atualiza o texto de análise detalhado."""
+        import math
+        
         params = result.params_used
         
-        initial_fmt = format_currency(params['capital_inicial'])
-        monthly_fmt = format_currency(params['aporte_mensal'])
+        # Valores formatados
+        initial = params['capital_inicial']
+        monthly = params['aporte_mensal']
+        annual_rate = params['rentabilidade_anual']
+        years = params['periodo_anos']
+        meta = params.get('meta', 0)
+        
+        initial_fmt = format_currency(initial)
+        monthly_fmt = format_currency(monthly)
         final_fmt = format_currency(result.final_balance_det)
         interest_fmt = format_currency(result.total_interest_det)
+        invested_fmt = format_currency(result.total_invested)
         
+        # Rentabilidade acumulada
         total = result.total_invested
         rentabilidade = (result.total_interest_det / total * 100) if total > 0 else 0
         
-        lines = [
-            f"• Investimento: {initial_fmt} + {monthly_fmt}/mês",
-            f"• Rentabilidade: {params['rentabilidade_anual']:.2f}% a.a.",
-            f"• Saldo final: {final_fmt}",
-            f"• Lucro total: {interest_fmt}",
-            f"• Rentabilidade acumulada: {rentabilidade:.2f}%"
-        ]
+        # Construir linhas de análise
+        lines = []
+        
+        # Investimento
+        lines.append(f"<b>💼 Investimento</b>")
+        lines.append(f"• Capital inicial: {initial_fmt}")
+        lines.append(f"• Aporte mensal: {monthly_fmt}")
+        lines.append(f"• Total investido: {invested_fmt}")
+        lines.append("")
+        
+        # Rentabilidade
+        lines.append(f"<b>📈 Rentabilidade</b>")
+        lines.append(f"• Taxa anual: {annual_rate:.2f}% a.a.")
+        lines.append(f"• Lucro com juros: {interest_fmt}")
+        lines.append(f"• Rentabilidade acumulada: {rentabilidade:.1f}%")
+        lines.append("")
+        
+        # Resultado
+        lines.append(f"<b>🎯 Resultado Final</b>")
+        lines.append(f"• Saldo após {years} anos: <span style='color:#10B981;font-weight:bold;'>{final_fmt}</span>")
+        
+        # Cálculo do tempo para atingir a meta (usando logaritmo)
+        if meta > 0:
+            time_to_goal = self._calculate_time_to_goal(initial, monthly, annual_rate, meta)
+            
+            if time_to_goal is not None:
+                if time_to_goal <= years:
+                    lines.append(f"• Meta de {format_currency(meta)}: "
+                               f"<span style='color:#10B981;'>✓ Atingida em ~{time_to_goal:.1f} anos</span>")
+                else:
+                    lines.append(f"• Meta de {format_currency(meta)}: "
+                               f"<span style='color:#F59E0B;'>→ Necessário ~{time_to_goal:.1f} anos</span>")
+            else:
+                lines.append(f"• Meta de {format_currency(meta)}: "
+                           f"<span style='color:#EF4444;'>✗ Inatingível com estes parâmetros</span>")
         
         self.analysis_box.analysis_label.setText("<br>".join(lines))
+    
+    def _calculate_time_to_goal(self, initial: float, monthly: float, annual_rate: float, goal: float) -> float:
+        """
+        Calcula o tempo necessário para atingir a meta usando a fórmula logarítmica.
+        
+        Fórmula: t = ln((M*i + a) / (C*i + a)) / ln(1+i)
+        
+        Onde:
+        - M = Meta (goal)
+        - C = Capital inicial
+        - a = Aporte mensal
+        - i = Taxa mensal
+        - t = Tempo em meses
+        
+        Args:
+            initial: Capital inicial
+            monthly: Aporte mensal
+            annual_rate: Taxa de juros anual (%)
+            goal: Meta a ser atingida
+            
+        Returns:
+            Tempo em anos (float) ou None se impossível
+        """
+        import math
+        
+        # Se a meta já foi atingida
+        if initial >= goal:
+            return 0.0
+        
+        # Taxa mensal
+        i = (1 + annual_rate / 100) ** (1/12) - 1
+        
+        # Se taxa é zero, fazer cálculo simples
+        if i <= 0:
+            if monthly <= 0:
+                return None  # Impossível sem juros e sem aportes
+            months = (goal - initial) / monthly
+            return months / 12
+        
+        # Fórmula: t = ln((M*i + a) / (C*i + a)) / ln(1+i)
+        numerator = goal * i + monthly
+        denominator = initial * i + monthly
+        
+        # Verificar se é matematicamente possível
+        if denominator <= 0 or numerator <= 0:
+            return None
+        
+        if numerator <= denominator:
+            # Meta já atingida ou inatingível
+            if initial >= goal:
+                return 0.0
+            return None
+        
+        try:
+            months = math.log(numerator / denominator) / math.log(1 + i)
+            years = months / 12
+            
+            # Limitar a um valor razoável (máx 200 anos)
+            if years > 200:
+                return None
+            
+            return years
+        except (ValueError, ZeroDivisionError):
+            return None
     
     def _on_reset(self):
         """Reseta todos os campos."""

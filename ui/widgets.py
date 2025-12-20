@@ -1085,9 +1085,9 @@ class AnalysisBox(QFrame):
         self.setObjectName("analysis_box")
         self.setStyleSheet("""
             QFrame#analysis_box {
-                background-color: rgba(22, 160, 133, 0.08);
-                border-left: 4px solid #16a085;
-                border-radius: 0px 8px 8px 0px;
+                background-color: rgba(16, 185, 129, 0.06);
+                border-left: 4px solid #10B981;
+                border-radius: 0px 12px 12px 0px;
             }
         """)
         
@@ -1096,24 +1096,25 @@ class AnalysisBox(QFrame):
         layout.setSpacing(10)
         
         # Título
-        title = QLabel("Análise da Simulação:")
+        title = QLabel("📊 Análise da Simulação")
         title.setStyleSheet("""
             font-size: 16px;
             font-weight: bold;
-            color: #2c3e50;
+            color: #1F2937;
             margin-bottom: 8px;
             background: transparent;
         """)
         layout.addWidget(title)
         
-        # Texto da análise
+        # Texto da análise (suporta HTML)
         self.analysis_label = QLabel("")
         self.analysis_label.setObjectName("analysis_text")
         self.analysis_label.setWordWrap(True)
+        self.analysis_label.setTextFormat(Qt.RichText)
         self.analysis_label.setStyleSheet("""
-            font-size: 14px;
-            color: #2c3e50;
-            line-height: 1.8;
+            font-size: 13px;
+            color: #374151;
+            line-height: 1.7;
             background: transparent;
         """)
         layout.addWidget(self.analysis_label)
