@@ -209,6 +209,8 @@ class MonteCarloResult:
     balances_max: np.ndarray       # Máximo (melhor cenário)
     balances_p10: np.ndarray       # Percentil 10
     balances_p90: np.ndarray       # Percentil 90
+    balances_p2_5: np.ndarray      # IC 95% inferior (P2.5)
+    balances_p97_5: np.ndarray     # IC 95% superior (P97.5)
     
     # Totais Determinísticos
     total_invested: float
@@ -220,18 +222,14 @@ class MonteCarloResult:
     final_balance_min: float
     final_balance_max: float
     
-    # Campos com valores padrão (devem vir por último)
-    balances_p2_5: np.ndarray = field(default_factory=lambda: np.array([]))   # IC 95% inferior
-    balances_p97_5: np.ndarray = field(default_factory=lambda: np.array([]))  # IC 95% superior
-    
-    # Projeção anual
+    # Projeção anual (com default)
     yearly_projection: List[YearlyProjectionMC] = field(default_factory=list)
     
-    # Metadados
+    # Metadados (com default)
     n_simulations: int = 5000
     has_monte_carlo: bool = False
     
-    # Parâmetros usados (para referência)
+    # Parâmetros usados (com default)
     params_used: dict = field(default_factory=dict)
 
 

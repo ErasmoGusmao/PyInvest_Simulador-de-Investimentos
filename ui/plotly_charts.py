@@ -239,22 +239,24 @@ class EvolutionChartPlotly(PlotlyChartWidget):
             showlegend=True,
             legend=dict(
                 orientation='h',
-                yanchor='bottom',
-                y=1.02,
-                xanchor='left',
-                x=0,
-                bgcolor='rgba(255,255,255,0.9)',
+                yanchor='top',
+                y=-0.25,
+                xanchor='center',
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.95)',
                 bordercolor='#E5E7EB',
                 borderwidth=1,
-                font=dict(size=11)
+                font=dict(size=10),
+                itemsizing='constant',
+                traceorder='normal'
             ),
             
             # Fundo
             paper_bgcolor='white',
             plot_bgcolor='white',
             
-            # Margens
-            margin=dict(l=80, r=30, t=60, b=60),
+            # Margens (aumentado bottom para legenda bem espaçada)
+            margin=dict(l=80, r=30, t=30, b=120),
             
             # Hover com Spikelines
             hovermode='closest',

@@ -190,20 +190,26 @@ class ModernMainWindow(QMainWindow):
         """Cria o cabeçalho moderno."""
         header = QFrame()
         header.setObjectName("header_card")
-        header.setFixedHeight(110)
+        header.setMinimumHeight(100)
         apply_shadow(header)
         
         header_layout = QVBoxLayout(header)
         header_layout.setAlignment(Qt.AlignCenter)
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(6)
+        header_layout.setContentsMargins(24, 20, 24, 20)
         
         # Título com ícone
         title_layout = QHBoxLayout()
         title_layout.setAlignment(Qt.AlignCenter)
-        title_layout.setSpacing(12)
+        title_layout.setSpacing(10)
         
+        # Ícone emoji
         icon = QLabel("💰")
-        icon.setStyleSheet("font-size: 36px; background: transparent;")
+        icon.setStyleSheet("""
+            font-size: 32px; 
+            background: transparent;
+            line-height: 1;
+        """)
         
         title = QLabel("Simulador de Investimentos")
         title.setObjectName("main_title")
