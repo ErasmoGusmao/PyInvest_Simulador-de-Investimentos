@@ -7,22 +7,27 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QFrame, QSizePolicy,
     QScrollArea, QMessageBox, QSpacerItem, QFileDialog,
-    QSpinBox, QGroupBox, QProgressBar, QGraphicsDropShadowEffect
+    QSpinBox, QGroupBox, QProgressBar, QGraphicsDropShadowEffect,
+    QDateEdit
 )
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QDate
 from PySide6.QtGui import QFont, QColor
+
+from datetime import date
 
 from core.monte_carlo import (
     ParameterRange, MonteCarloInput, MonteCarloResult,
     MonteCarloEngine, MonteCarloWorker
 )
 from core.calculation import format_currency
+from core.events import EventsManager, ExtraordinaryEvent
 from ui.styles_modern import get_modern_style, get_colors, apply_shadow
 from ui.plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
 from ui.widgets import (
     SummaryCard, GoalStatusCard, ProjectionTable, 
     AnalysisBox, SensitivityDashboard
 )
+from ui.events_dialog import EventsDialog
 
 
 class RangeInput(QFrame):
@@ -145,6 +150,9 @@ class ModernMainWindow(QMainWindow):
         
         # Thread pool para Monte Carlo
         self.thread_pool = QThreadPool()
+        
+        # Gerenciador de eventos extraordinários
+        self.events_manager = EventsManager()
         
         self._setup_ui()
     
@@ -293,6 +301,53 @@ class ModernMainWindow(QMainWindow):
         
         card_layout.addSpacing(8)
         
+        # Data de Início
+        date_label = QLabel("Data de Início da Simulação")
+        date_label.setObjectName("field_label")
+        card_layout.addWidget(date_label)
+        
+        self.input_start_date = QDateEdit()
+        self.input_start_date.setCalendarPopup(True)
+        self.input_start_date.setDate(QDate.currentDate())
+        self.input_start_date.setDisplayFormat("dd/MM/yyyy")
+        self.input_start_date.setStyleSheet("""
+            QDateEdit {
+                background-color: #FFFFFF;
+                border: 2px solid #E5E7EB;
+                border-radius: 10px;
+                padding: 12px 16px;
+                font-size: 14px;
+                color: #1F2937;
+                min-height: 20px;
+            }
+            QDateEdit:focus {
+                border-color: #10B981;
+            }
+            QDateEdit::drop-down {
+                border: none;
+                width: 30px;
+            }
+            QDateEdit::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #6B7280;
+                margin-right: 10px;
+            }
+        """)
+        card_layout.addWidget(self.input_start_date)
+        
+        date_help = QLabel("📅 Defina quando a simulação começa (para sincronizar eventos)")
+        date_help.setStyleSheet("""
+            font-size: 11px;
+            color: #9CA3AF;
+            font-style: italic;
+            background: transparent;
+        """)
+        card_layout.addWidget(date_help)
+        
+        card_layout.addSpacing(8)
+        
         # === CONFIGURAÇÃO MONTE CARLO ===
         mc_group = QGroupBox("Configuração Monte Carlo")
         mc_group_layout = QVBoxLayout(mc_group)
@@ -357,6 +412,42 @@ class ModernMainWindow(QMainWindow):
         mc_group_layout.addWidget(mc_help)
         
         card_layout.addWidget(mc_group)
+        
+        card_layout.addSpacing(12)
+        
+        # === EVENTOS EXTRAORDINÁRIOS ===
+        btn_events = QPushButton("📅  Eventos Extraordinários")
+        btn_events.setObjectName("btn_secondary")
+        btn_events.setCursor(Qt.PointingHandCursor)
+        btn_events.clicked.connect(self._on_open_events)
+        btn_events.setStyleSheet("""
+            QPushButton {
+                background-color: #EFF6FF;
+                color: #1E40AF;
+                border: 2px solid #BFDBFE;
+                border-radius: 10px;
+                padding: 12px 20px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #DBEAFE;
+                border-color: #93C5FD;
+            }
+        """)
+        card_layout.addWidget(btn_events)
+        
+        # Label de status dos eventos
+        self.events_status_label = QLabel("")
+        self.events_status_label.setStyleSheet("""
+            font-size: 11px;
+            color: #6B7280;
+            font-style: italic;
+            background: transparent;
+            padding-left: 4px;
+        """)
+        self.events_status_label.setVisible(False)
+        card_layout.addWidget(self.events_status_label)
         
         card_layout.addSpacing(16)
         
@@ -601,6 +692,10 @@ class ModernMainWindow(QMainWindow):
         if errors:
             return False, errors, None
         
+        # Obter data de início
+        qdate = self.input_start_date.date()
+        start_date = date(qdate.year(), qdate.month(), qdate.day())
+        
         # Criar input Monte Carlo
         mc_input = MonteCarloInput(
             capital_inicial=capital_range,
@@ -608,7 +703,9 @@ class ModernMainWindow(QMainWindow):
             rentabilidade_anual=rent_range,
             periodo_anos=int(float(self.input_periodo.text())),
             meta=self._parse_value(self.input_meta.text()),
-            n_simulations=self.spin_simulations.value()
+            n_simulations=self.spin_simulations.value(),
+            start_date=start_date,
+            events_manager=self.events_manager if self.events_manager.count > 0 else None
         )
         
         return True, [], mc_input
@@ -859,19 +956,85 @@ class ModernMainWindow(QMainWindow):
         
         self.projection_table.reset_columns()
         self.projection_table.setRowCount(0)
+        
+        # Limpar eventos
+        self.events_manager.clear()
+        self._update_events_status()
+    
+    def _on_open_events(self):
+        """Abre o diálogo de eventos extraordinários."""
+        # Obter data de início
+        qdate = self.input_start_date.date()
+        start_date = date(qdate.year(), qdate.month(), qdate.day())
+        
+        # Obter período em meses
+        try:
+            years = int(float(self.input_periodo.text() or "10"))
+        except:
+            years = 10
+        simulation_months = years * 12
+        
+        dialog = EventsDialog(
+            self.events_manager, 
+            start_date=start_date,
+            simulation_months=simulation_months,
+            parent=self
+        )
+        dialog.events_confirmed.connect(self._on_events_confirmed)
+        dialog.exec()
+    
+    def _on_events_confirmed(self, events_manager: EventsManager):
+        """Callback quando eventos são confirmados."""
+        self.events_manager = events_manager
+        self._update_events_status()
+    
+    def _update_events_status(self):
+        """Atualiza o label de status dos eventos."""
+        count = self.events_manager.count
+        
+        if count > 0:
+            deposits = self.events_manager.total_deposits
+            withdrawals = self.events_manager.total_withdrawals
+            
+            status_parts = [f"📅 {count} evento{'s' if count != 1 else ''}"]
+            if deposits > 0:
+                status_parts.append(f"+{format_currency(deposits)}")
+            if withdrawals > 0:
+                status_parts.append(f"-{format_currency(withdrawals)}")
+            
+            self.events_status_label.setText(" | ".join(status_parts))
+            self.events_status_label.setVisible(True)
+        else:
+            self.events_status_label.setVisible(False)
     
     def _on_export_csv(self):
-        """Exporta dados para CSV."""
+        """Exporta dados para CSV com tratamento de erros detalhado."""
         if not self.projection_table.has_data():
             QMessageBox.warning(self, "Sem Dados", "Execute uma simulação primeiro.")
             return
         
         filepath, _ = QFileDialog.getSaveFileName(
-            self, "Salvar CSV", "projecao_monte_carlo.csv", "CSV (*.csv)"
+            self, "Salvar Projeção CSV", 
+            "projecao_investimento.csv", 
+            "Arquivos CSV (*.csv);;Todos os arquivos (*)"
         )
         
-        if filepath:
-            if self.projection_table.export_to_csv(filepath):
-                QMessageBox.information(self, "Sucesso", f"Exportado para:\n{filepath}")
-            else:
-                QMessageBox.critical(self, "Erro", "Falha ao exportar.")
+        if not filepath:
+            return  # Usuário cancelou
+        
+        # Garantir extensão .csv
+        if not filepath.lower().endswith('.csv'):
+            filepath += '.csv'
+        
+        success, error_msg = self.projection_table.export_to_csv(filepath)
+        
+        if success:
+            QMessageBox.information(
+                self, "Exportação Concluída", 
+                f"Dados exportados com sucesso!\n\nArquivo salvo em:\n{filepath}"
+            )
+        else:
+            QMessageBox.critical(
+                self, "Erro na Exportação", 
+                f"Não foi possível exportar os dados.\n\n{error_msg}"
+            )

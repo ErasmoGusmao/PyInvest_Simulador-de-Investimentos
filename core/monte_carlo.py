@@ -5,8 +5,9 @@ Implementa análise probabilística vetorizada com NumPy.
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from enum import Enum
+from datetime import date
 
 
 class DistributionType(Enum):
@@ -138,6 +139,8 @@ class MonteCarloInput:
     periodo_anos: int  # Período sempre fixo
     meta: float = 0.0
     n_simulations: int = 5000
+    start_date: date = field(default_factory=date.today)
+    events_manager: object = None  # EventsManager (evita import circular)
     
     def validate_all(self) -> Tuple[bool, List[str]]:
         """
@@ -194,6 +197,9 @@ class YearlyProjectionMC:
     balance_p90: float  # Percentil 90
     balance_p2_5: float = 0.0   # Percentil 2.5 (IC 95% inferior)
     balance_p97_5: float = 0.0  # Percentil 97.5 (IC 95% superior)
+    extra_deposits: float = 0.0  # Aportes extras no ano
+    withdrawals: float = 0.0     # Resgates no ano
+    balance_p97_5: float = 0.0  # Percentil 97.5 (IC 95% superior)
 
 
 @dataclass
@@ -231,6 +237,13 @@ class MonteCarloResult:
     
     # Parâmetros usados (com default)
     params_used: dict = field(default_factory=dict)
+    
+    # Eventos extraordinários consolidados por ano
+    yearly_events: Dict[int, Tuple[float, float]] = field(default_factory=dict)
+    
+    # Insolvência (mês onde ocorreu, se houver)
+    insolvency_month: Optional[int] = None
+    insolvency_year: Optional[float] = None
 
 
 class MonteCarloEngine:
@@ -307,7 +320,7 @@ class MonteCarloEngine:
     
     def run(self) -> MonteCarloResult:
         """
-        Executa a simulação completa.
+        Executa a simulação completa com suporte a eventos extraordinários.
         
         Returns:
             MonteCarloResult com todos os dados
@@ -320,15 +333,33 @@ class MonteCarloEngine:
         det_monthly = self.inputs.aporte_mensal.get_deterministic_value()
         det_rate = self.inputs.rentabilidade_anual.get_deterministic_value()
         
-        # Cálculo determinístico
-        balances_det = self._calculate_single_scenario(
-            det_initial, det_monthly, det_rate, years
+        # Obter eventos consolidados por mês
+        monthly_events = {}
+        yearly_events = {}
+        
+        if self.inputs.events_manager and hasattr(self.inputs.events_manager, 'get_monthly_consolidated'):
+            monthly_events = self.inputs.events_manager.get_monthly_consolidated(
+                self.inputs.start_date, 
+                total_months
+            )
+            yearly_events = self.inputs.events_manager.get_yearly_summary(
+                self.inputs.start_date.year,
+                years
+            )
+        
+        # Cálculo determinístico COM eventos
+        balances_det, insolvency_month = self._calculate_with_events(
+            det_initial, det_monthly, det_rate, years, monthly_events
         )
         
-        # Totais determinísticos
-        total_invested = det_initial + (det_monthly * total_months)
+        # Calcular total investido (inclui aportes extras)
+        total_regular = det_initial + (det_monthly * total_months)
+        total_extra_deposits = sum(dep for dep, _ in monthly_events.values())
+        total_withdrawals = sum(wd for _, wd in monthly_events.values())
+        total_invested = total_regular + total_extra_deposits
+        
         final_balance_det = balances_det[-1]
-        total_interest_det = final_balance_det - total_invested
+        total_interest_det = final_balance_det - total_invested + total_withdrawals
         
         months = np.arange(total_months + 1)
         
@@ -336,8 +367,8 @@ class MonteCarloEngine:
         has_mc = self.inputs.has_probabilistic_params()
         
         if has_mc:
-            # Executar Monte Carlo
-            all_balances, _ = self._calculate_monte_carlo_vectorized()
+            # Executar Monte Carlo COM eventos
+            all_balances = self._calculate_monte_carlo_with_events(monthly_events)
             
             # Calcular estatísticas
             balances_mean = np.mean(all_balances, axis=0)
@@ -367,11 +398,20 @@ class MonteCarloEngine:
             final_balance_min = final_balance_det
             final_balance_max = final_balance_det
         
-        # Projeção anual
+        # Projeção anual com eventos
         yearly_projection = []
         for year in range(years + 1):
             month_idx = year * 12
             invested = det_initial + (det_monthly * month_idx)
+            
+            # Adicionar aportes extras ao investido
+            for m in range(year * 12):
+                if m in monthly_events:
+                    invested += monthly_events[m][0]
+            
+            # Eventos do ano
+            extra_deps = yearly_events.get(year, (0, 0))[0]
+            withdrawals = yearly_events.get(year, (0, 0))[1]
             
             yearly_projection.append(YearlyProjectionMC(
                 year=year,
@@ -383,7 +423,9 @@ class MonteCarloEngine:
                 balance_p10=balances_p10[month_idx],
                 balance_p90=balances_p90[month_idx],
                 balance_p2_5=balances_p2_5[month_idx],
-                balance_p97_5=balances_p97_5[month_idx]
+                balance_p97_5=balances_p97_5[month_idx],
+                extra_deposits=extra_deps,
+                withdrawals=withdrawals
             ))
         
         # Parâmetros usados
@@ -393,7 +435,9 @@ class MonteCarloEngine:
             'rentabilidade_anual': det_rate,
             'periodo_anos': years,
             'meta': self.inputs.meta,
-            'n_simulations': self.inputs.n_simulations
+            'n_simulations': self.inputs.n_simulations,
+            'total_extra_deposits': total_extra_deposits,
+            'total_withdrawals': total_withdrawals
         }
         
         return MonteCarloResult(
@@ -415,8 +459,105 @@ class MonteCarloEngine:
             yearly_projection=yearly_projection,
             n_simulations=self.inputs.n_simulations,
             has_monte_carlo=has_mc,
-            params_used=params_used
+            params_used=params_used,
+            yearly_events=yearly_events,
+            insolvency_month=insolvency_month,
+            insolvency_year=insolvency_month / 12 if insolvency_month else None
         )
+    
+    def _calculate_with_events(
+        self, 
+        initial: float, 
+        monthly: float, 
+        annual_rate: float, 
+        years: int,
+        monthly_events: Dict[int, Tuple[float, float]]
+    ) -> Tuple[np.ndarray, Optional[int]]:
+        """
+        Calcula saldos com eventos extraordinários.
+        
+        Returns:
+            Tuple (balances_array, insolvency_month ou None)
+        """
+        total_months = years * 12
+        monthly_rate = (1 + annual_rate / 100) ** (1/12) - 1
+        
+        balances = np.zeros(total_months + 1)
+        balances[0] = initial
+        
+        insolvency_month = None
+        
+        for m in range(1, total_months + 1):
+            # Juros sobre saldo anterior
+            balances[m] = balances[m-1] * (1 + monthly_rate)
+            
+            # Aporte mensal regular
+            balances[m] += monthly
+            
+            # Eventos do mês
+            if m in monthly_events:
+                deposits, withdrawals = monthly_events[m]
+                balances[m] += deposits
+                
+                if withdrawals > 0:
+                    if balances[m] < withdrawals:
+                        # Insolvência!
+                        if insolvency_month is None:
+                            insolvency_month = m
+                        balances[m] = 0
+                    else:
+                        balances[m] -= withdrawals
+            
+            # Garantir não negativo
+            if balances[m] < 0:
+                balances[m] = 0
+                if insolvency_month is None:
+                    insolvency_month = m
+        
+        return balances, insolvency_month
+    
+    def _calculate_monte_carlo_with_events(
+        self,
+        monthly_events: Dict[int, Tuple[float, float]]
+    ) -> np.ndarray:
+        """
+        Executa simulação Monte Carlo vetorizada com eventos.
+        
+        Os eventos são fixos (nominais) em todos os cenários.
+        """
+        n = self.inputs.n_simulations
+        years = self.inputs.periodo_anos
+        total_months = years * 12
+        
+        # Gerar parâmetros aleatórios
+        initials = self.inputs.capital_inicial.sample(n)
+        monthlies = self.inputs.aporte_mensal.sample(n)
+        rates = self.inputs.rentabilidade_anual.sample(n)
+        
+        # Converter taxa anual para mensal
+        monthly_rates = (1 + rates / 100) ** (1/12) - 1
+        
+        # Matriz de saldos
+        all_balances = np.zeros((n, total_months + 1))
+        all_balances[:, 0] = initials
+        
+        for m in range(1, total_months + 1):
+            # Juros
+            all_balances[:, m] = all_balances[:, m-1] * (1 + monthly_rates)
+            
+            # Aporte mensal
+            all_balances[:, m] += monthlies
+            
+            # Eventos do mês (fixos para todos os cenários)
+            if m in monthly_events:
+                deposits, withdrawals = monthly_events[m]
+                all_balances[:, m] += deposits
+                all_balances[:, m] -= withdrawals
+            
+            # Garantir não negativo
+            all_balances[:, m] = np.maximum(0, all_balances[:, m])
+        
+        return all_balances
 
 
 # =============================================================================

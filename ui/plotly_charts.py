@@ -232,6 +232,41 @@ class EvolutionChartPlotly(PlotlyChartWidget):
             hovertemplate='<b>Ano %{x:.0f}</b><br>Saldo: R$ %{y:,.2f}<extra></extra>'
         ))
         
+        # === MARCADOR DE INSOLVÊNCIA (se houver) ===
+        insolvency_month = getattr(result, 'insolvency_month', None)
+        if insolvency_month is not None:
+            insolvency_year = insolvency_month / 12
+            
+            fig.add_trace(go.Scatter(
+                x=[insolvency_year],
+                y=[0],
+                mode='markers+text',
+                marker=dict(
+                    size=18,
+                    color='#DC2626',
+                    symbol='x',
+                    line=dict(color='white', width=2)
+                ),
+                text=['INSOLVÊNCIA'],
+                textposition='top center',
+                textfont=dict(size=10, color='#DC2626', family='Segoe UI'),
+                name='⚠️ Insolvência',
+                hovertemplate='<b>⚠️ INSOLVÊNCIA</b><br>Mês %{customdata}<br>Saldo zerado<extra></extra>',
+                customdata=[insolvency_month],
+                showlegend=True
+            ))
+            
+            # Linha vertical no ponto de insolvência
+            fig.add_shape(
+                type='line',
+                x0=insolvency_year,
+                x1=insolvency_year,
+                y0=0,
+                y1=1,
+                yref='paper',
+                line=dict(color='#DC2626', width=2, dash='dash')
+            )
+        
         # === Layout com Spikelines ===
         fig.update_layout(
             # Geral

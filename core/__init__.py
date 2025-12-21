@@ -17,6 +17,12 @@ from .worker import (
     SimulationWorker,
     SimulationSignals
 )
+from .events import (
+    ExtraordinaryEvent,
+    EventsManager,
+    InsolvencyEvent,
+    apply_events_to_simulation
+)
 
 __all__ = [
     # Calculation
@@ -35,5 +41,10 @@ __all__ = [
     "run_monte_carlo_simulation",
     # Worker
     "SimulationWorker",
-    "SimulationSignals"
+    "SimulationSignals",
+    # Events
+    "ExtraordinaryEvent",
+    "EventsManager",
+    "InsolvencyEvent",
+    "apply_events_to_simulation"
 ]

@@ -2,6 +2,7 @@
 from .window_modern import ModernMainWindow
 from .styles_modern import get_modern_style, get_colors, apply_shadow
 from .plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
+from .events_dialog import EventsDialog
 from .widgets import (
     SummaryCard, GoalStatusCard, EvolutionChart,
     CompositionChart, ProjectionTable, AnalysisBox,
@@ -19,6 +20,8 @@ __all__ = [
     # Plotly Charts
     "EvolutionChartPlotly",
     "CompositionChartPlotly",
+    # Events
+    "EventsDialog",
     # Widgets
     "SummaryCard",
     "GoalStatusCard", 

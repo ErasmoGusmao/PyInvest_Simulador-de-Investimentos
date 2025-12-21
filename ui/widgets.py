@@ -931,7 +931,7 @@ class ProjectionTable(QTableWidget):
             pct_item.setBackground(bg_color)
             self.setItem(row, 4, pct_item)
     
-    def export_to_csv(self, filepath: str) -> bool:
+    def export_to_csv(self, filepath: str) -> tuple:
         """
         Exporta os dados da tabela para um arquivo CSV.
         
@@ -939,34 +939,65 @@ class ProjectionTable(QTableWidget):
             filepath: Caminho do arquivo CSV a ser criado
             
         Returns:
-            True se exportou com sucesso, False caso contrário
+            Tuple (success: bool, error_message: str ou None)
         """
         if not self._export_data:
-            return False
+            return False, "Nenhum dado disponível para exportação."
         
         try:
             import csv
             
             with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                fieldnames = ['Ano', 'Aportes Acum. (R$)', 'Juros Acum. (R$)', 
-                             'Saldo Total (R$)', '% do Alvo']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=';')
+                # Detectar colunas disponíveis baseado nos dados
+                first_row = self._export_data[0]
                 
+                # Construir fieldnames dinamicamente baseado nas chaves do primeiro registro
+                if 'Saldo (Det.)' in first_row:
+                    # Formato Monte Carlo
+                    fieldnames = ['Ano', 'Total Investido']
+                    
+                    # Adicionar colunas de eventos se existirem
+                    if 'Aportes Extras' in first_row:
+                        fieldnames.extend(['Aportes Extras', 'Resgates'])
+                    
+                    fieldnames.extend([
+                        'Saldo (Det.)', 'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+                    ])
+                else:
+                    # Formato antigo
+                    fieldnames = [
+                        'Ano', 'Aportes Acum. (R$)', 'Juros Acum. (R$)', 
+                        'Saldo Total (R$)', '% do Alvo'
+                    ]
+                
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=';')
                 writer.writeheader()
+                
                 for row_data in self._export_data:
-                    # Formatar valores para CSV
-                    writer.writerow({
-                        'Ano': row_data['Ano'],
-                        'Aportes Acum. (R$)': f"{row_data['Aportes Acum. (R$)']:.2f}".replace('.', ','),
-                        'Juros Acum. (R$)': f"{row_data['Juros Acum. (R$)']:.2f}".replace('.', ','),
-                        'Saldo Total (R$)': f"{row_data['Saldo Total (R$)']:.2f}".replace('.', ','),
-                        '% do Alvo': f"{row_data['% do Alvo']:.1f}%"
-                    })
+                    # Criar linha formatada com números limpos
+                    clean_row = {}
+                    for key in fieldnames:
+                        value = row_data.get(key, 0)
+                        if key == 'Ano':
+                            clean_row[key] = value
+                        elif key == '% do Alvo':
+                            clean_row[key] = f"{value:.1f}%"
+                        elif isinstance(value, (int, float)):
+                            # Número puro com vírgula decimal (padrão BR)
+                            clean_row[key] = f"{value:.2f}".replace('.', ',')
+                        else:
+                            clean_row[key] = value
+                    
+                    writer.writerow(clean_row)
             
-            return True
+            return True, None
+            
+        except PermissionError:
+            return False, "Permissão negada. O arquivo pode estar aberto em outro programa."
+        except OSError as e:
+            return False, f"Erro de sistema de arquivos: {e}"
         except Exception as e:
-            print(f"Erro ao exportar CSV: {e}")
-            return False
+            return False, f"Erro inesperado: {str(e)}"
     
     def has_data(self) -> bool:
         """Verifica se há dados para exportar."""
@@ -976,12 +1007,25 @@ class ProjectionTable(QTableWidget):
         """Atualiza a tabela com dados de Monte Carlo expandidos."""
         colors = get_colors()
         
+        # Verificar se há eventos extraordinários
+        has_events = any(
+            getattr(proj, 'extra_deposits', 0) > 0 or getattr(proj, 'withdrawals', 0) > 0 
+            for proj in result.yearly_projection
+        )
+        
         # Reconfigurar colunas para Monte Carlo
-        self.setColumnCount(6)
-        self.setHorizontalHeaderLabels([
-            'Ano', 'Total Investido', 'Saldo (Det.)', 
-            'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
-        ])
+        if has_events:
+            self.setColumnCount(8)
+            self.setHorizontalHeaderLabels([
+                'Ano', 'Total Investido', 'Aportes Extras', 'Resgates',
+                'Saldo (Det.)', 'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+            ])
+        else:
+            self.setColumnCount(6)
+            self.setHorizontalHeaderLabels([
+                'Ano', 'Total Investido', 'Saldo (Det.)', 
+                'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+            ])
         
         # Reconfigurar header
         for col in range(self.columnCount()):
@@ -990,7 +1034,7 @@ class ProjectionTable(QTableWidget):
             self.setHorizontalHeaderItem(col, header_item)
         
         header = self.horizontalHeader()
-        for col in range(6):
+        for col in range(self.columnCount()):
             header.setSectionResizeMode(col, QHeaderView.Stretch)
         header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
@@ -998,17 +1042,27 @@ class ProjectionTable(QTableWidget):
         self._export_data = []
         
         for row, proj in enumerate(result.yearly_projection):
+            extra_deposits = getattr(proj, 'extra_deposits', 0.0)
+            withdrawals = getattr(proj, 'withdrawals', 0.0)
+            
             # Guardar dados para exportação
-            self._export_data.append({
+            export_row = {
                 'Ano': proj.year,
                 'Total Investido': proj.total_invested,
                 'Saldo (Det.)': proj.balance_deterministic,
                 'Saldo (Média)': proj.balance_mean,
                 'Saldo (Mín)': proj.balance_min,
                 'Saldo (Máx)': proj.balance_max
-            })
+            }
+            
+            if has_events:
+                export_row['Aportes Extras'] = extra_deposits
+                export_row['Resgates'] = withdrawals
+            
+            self._export_data.append(export_row)
             
             bg_color = QColor('#ffffff') if row % 2 == 0 else QColor('#f8fffe')
+            col_idx = 0
             
             # Ano
             year_item = QTableWidgetItem(f"Ano {proj.year}")
@@ -1018,13 +1072,43 @@ class ProjectionTable(QTableWidget):
             font = year_item.font()
             font.setBold(True)
             year_item.setFont(font)
-            self.setItem(row, 0, year_item)
+            self.setItem(row, col_idx, year_item)
+            col_idx += 1
             
             # Total Investido
             invested_item = QTableWidgetItem(format_currency(proj.total_invested))
             invested_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             invested_item.setBackground(bg_color)
-            self.setItem(row, 1, invested_item)
+            self.setItem(row, col_idx, invested_item)
+            col_idx += 1
+            
+            # Colunas de eventos (se houver)
+            if has_events:
+                # Aportes Extras
+                deposits_item = QTableWidgetItem(
+                    format_currency(extra_deposits) if extra_deposits > 0 else "—"
+                )
+                deposits_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                if extra_deposits > 0:
+                    deposits_item.setForeground(QColor('#059669'))
+                else:
+                    deposits_item.setForeground(QColor('#9CA3AF'))
+                deposits_item.setBackground(bg_color)
+                self.setItem(row, col_idx, deposits_item)
+                col_idx += 1
+                
+                # Resgates
+                withdrawals_item = QTableWidgetItem(
+                    format_currency(withdrawals) if withdrawals > 0 else "—"
+                )
+                withdrawals_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                if withdrawals > 0:
+                    withdrawals_item.setForeground(QColor('#DC2626'))
+                else:
+                    withdrawals_item.setForeground(QColor('#9CA3AF'))
+                withdrawals_item.setBackground(bg_color)
+                self.setItem(row, col_idx, withdrawals_item)
+                col_idx += 1
             
             # Saldo Determinístico (destacado)
             det_item = QTableWidgetItem(format_currency(proj.balance_deterministic))
@@ -1035,28 +1119,31 @@ class ProjectionTable(QTableWidget):
             font = det_item.font()
             font.setBold(True)
             det_item.setFont(font)
-            self.setItem(row, 2, det_item)
+            self.setItem(row, col_idx, det_item)
+            col_idx += 1
             
             # Saldo Média (vermelho suave)
             mean_item = QTableWidgetItem(format_currency(proj.balance_mean))
             mean_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             mean_item.setForeground(QColor('#e74c3c'))
             mean_item.setBackground(bg_color)
-            self.setItem(row, 3, mean_item)
+            self.setItem(row, col_idx, mean_item)
+            col_idx += 1
             
             # Saldo Mínimo
             min_item = QTableWidgetItem(format_currency(proj.balance_min))
             min_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             min_item.setForeground(QColor('#7f8c8d'))
             min_item.setBackground(bg_color)
-            self.setItem(row, 4, min_item)
+            self.setItem(row, col_idx, min_item)
+            col_idx += 1
             
             # Saldo Máximo
             max_item = QTableWidgetItem(format_currency(proj.balance_max))
             max_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             max_item.setForeground(QColor('#3498db'))
             max_item.setBackground(bg_color)
-            self.setItem(row, 5, max_item)
+            self.setItem(row, col_idx, max_item)
     
     def reset_columns(self):
         """Reseta para configuração original (5 colunas)."""
