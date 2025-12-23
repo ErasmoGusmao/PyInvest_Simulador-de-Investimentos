@@ -23,6 +23,24 @@ from .events import (
     InsolvencyEvent,
     apply_events_to_simulation
 )
+from .statistics import (
+    ProjectData,
+    ParameterSet,
+    HistoricalReturn,
+    MonteCarloConfig,
+    PercentileStats,
+    ImplicitParameters,
+    RiskMetrics,
+    save_project,
+    load_project,
+    calculate_percentiles,
+    extract_implicit_parameters,
+    calculate_risk_metrics,
+    find_implicit_rate,
+    bootstrap_returns,
+    normal_returns,
+    t_student_returns
+)
 
 __all__ = [
     # Calculation
@@ -46,5 +64,22 @@ __all__ = [
     "ExtraordinaryEvent",
     "EventsManager",
     "InsolvencyEvent",
-    "apply_events_to_simulation"
+    "apply_events_to_simulation",
+    # Statistics
+    "ProjectData",
+    "ParameterSet",
+    "HistoricalReturn",
+    "MonteCarloConfig",
+    "PercentileStats",
+    "ImplicitParameters",
+    "RiskMetrics",
+    "save_project",
+    "load_project",
+    "calculate_percentiles",
+    "extract_implicit_parameters",
+    "calculate_risk_metrics",
+    "find_implicit_rate",
+    "bootstrap_returns",
+    "normal_returns",
+    "t_student_returns"
 ]
