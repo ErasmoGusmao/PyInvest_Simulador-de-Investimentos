@@ -867,62 +867,64 @@ class ModernMainWindow(QMainWindow):
         # =====================================================================
         projection_tab = QWidget()
         projection_main = QVBoxLayout(projection_tab)
-        projection_main.setSpacing(16)
-        projection_main.setContentsMargins(16, 16, 16, 16)
+        # Maximizar área útil: margens mínimas
+        projection_main.setSpacing(10)
+        projection_main.setContentsMargins(0, 5, 0, 5)
         
-        # --- LINHA SUPERIOR: Gráficos (70% + 30%) ---
+        # --- LINHA SUPERIOR: Gráficos (Proporção Áurea 3:1) ---
         charts_row = QHBoxLayout()
-        charts_row.setSpacing(16)
+        charts_row.setSpacing(10)
+        charts_row.setContentsMargins(8, 0, 8, 0)
         
-        # Gráfico de Evolução (70%)
+        # Gráfico de Evolução (75% - stretch 3)
         evolution_frame = QFrame()
         evolution_frame.setStyleSheet("""
             QFrame {
                 background: white;
                 border: 1px solid #E5E7EB;
-                border-radius: 10px;
+                border-radius: 8px;
             }
         """)
         evolution_inner = QVBoxLayout(evolution_frame)
-        evolution_inner.setContentsMargins(16, 12, 16, 12)
+        evolution_inner.setContentsMargins(12, 8, 12, 8)
+        evolution_inner.setSpacing(4)
         
         evolution_title = QLabel("📈 Evolução do Patrimônio")
-        evolution_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #374151; background: transparent;")
+        evolution_title.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151; background: transparent;")
         evolution_inner.addWidget(evolution_title)
         
         self.evolution_chart = EvolutionChartPlotly()
-        self.evolution_chart.setMinimumHeight(280)
-        self.evolution_chart.setMaximumHeight(400)
-        self.evolution_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.evolution_chart.setMinimumHeight(300)
+        self.evolution_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         evolution_inner.addWidget(self.evolution_chart)
         
-        charts_row.addWidget(evolution_frame, stretch=7)
+        charts_row.addWidget(evolution_frame, stretch=3)  # Proporção Áurea
         
-        # Gráfico de Composição (30%)
+        # Gráfico de Composição (25% - stretch 1)
         composition_frame = QFrame()
         composition_frame.setStyleSheet("""
             QFrame {
                 background: white;
                 border: 1px solid #E5E7EB;
-                border-radius: 10px;
+                border-radius: 8px;
             }
         """)
         composition_inner = QVBoxLayout(composition_frame)
-        composition_inner.setContentsMargins(16, 12, 16, 12)
+        composition_inner.setContentsMargins(12, 8, 12, 8)
+        composition_inner.setSpacing(4)
         
-        composition_title = QLabel("🥧 Composição do Saldo")
-        composition_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #374151; background: transparent;")
+        composition_title = QLabel("🥧 Composição")
+        composition_title.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151; background: transparent;")
         composition_inner.addWidget(composition_title)
         
         self.composition_chart = CompositionChartPlotly()
-        self.composition_chart.setMinimumHeight(280)
-        self.composition_chart.setMaximumHeight(400)
-        self.composition_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.composition_chart.setMinimumHeight(300)
+        self.composition_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         composition_inner.addWidget(self.composition_chart)
         
-        charts_row.addWidget(composition_frame, stretch=3)
+        charts_row.addWidget(composition_frame, stretch=1)  # Proporção Áurea
         
-        projection_main.addLayout(charts_row, stretch=60)
+        projection_main.addLayout(charts_row, stretch=65)
         
         # --- LINHA INFERIOR: Tabela de Cenários Reproduzíveis ---
         scenarios_frame = QFrame()
@@ -930,21 +932,21 @@ class ModernMainWindow(QMainWindow):
             QFrame {
                 background: white;
                 border: 1px solid #E5E7EB;
-                border-radius: 10px;
+                border-radius: 8px;
             }
         """)
         scenarios_inner = QVBoxLayout(scenarios_frame)
-        scenarios_inner.setContentsMargins(16, 12, 16, 12)
-        scenarios_inner.setSpacing(8)
+        scenarios_inner.setContentsMargins(12, 8, 12, 8)
+        scenarios_inner.setSpacing(6)
         
-        # Cabeçalho
+        # Cabeçalho compacto
         scenarios_header = QHBoxLayout()
         scenarios_title = QLabel("🎯 Cenários Reproduzíveis")
-        scenarios_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #374151; background: transparent;")
+        scenarios_title.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151; background: transparent;")
         scenarios_header.addWidget(scenarios_title)
         scenarios_header.addStretch()
-        scenarios_hint = QLabel("💡 Duplo clique para carregar parâmetros")
-        scenarios_hint.setStyleSheet("font-size: 11px; color: #9CA3AF; background: transparent;")
+        scenarios_hint = QLabel("💡 Duplo clique para carregar")
+        scenarios_hint.setStyleSheet("font-size: 10px; color: #9CA3AF; background: transparent;")
         scenarios_header.addWidget(scenarios_hint)
         scenarios_inner.addLayout(scenarios_header)
         
@@ -959,34 +961,38 @@ class ModernMainWindow(QMainWindow):
         header_cenarios = self.table_cenarios.horizontalHeader()
         header_cenarios.setSectionResizeMode(0, QHeaderView.Interactive)
         header_cenarios.setSectionResizeMode(1, QHeaderView.Fixed)
-        header_cenarios.setSectionResizeMode(2, QHeaderView.Interactive)
-        header_cenarios.setSectionResizeMode(3, QHeaderView.Interactive)
+        header_cenarios.setSectionResizeMode(2, QHeaderView.Stretch)
+        header_cenarios.setSectionResizeMode(3, QHeaderView.Stretch)
         header_cenarios.setSectionResizeMode(4, QHeaderView.Interactive)
         header_cenarios.setSectionResizeMode(5, QHeaderView.Stretch)
         
-        self.table_cenarios.setColumnWidth(0, 140)
-        self.table_cenarios.setColumnWidth(1, 70)
-        self.table_cenarios.setColumnWidth(2, 130)
-        self.table_cenarios.setColumnWidth(3, 120)
-        self.table_cenarios.setColumnWidth(4, 100)
+        self.table_cenarios.setColumnWidth(0, 150)
+        self.table_cenarios.setColumnWidth(1, 65)
+        self.table_cenarios.setColumnWidth(4, 90)
         
         header_cenarios.setStretchLastSection(True)
-        header_cenarios.setMinimumSectionSize(60)
+        header_cenarios.setMinimumSectionSize(50)
         
         self.table_cenarios.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_cenarios.setAlternatingRowColors(True)
         self.table_cenarios.verticalHeader().setVisible(False)
-        self.table_cenarios.setMinimumHeight(150)
-        self.table_cenarios.setMaximumHeight(220)
+        
+        # Altura calculada: 6 linhas (P5,P25,P50,P75,P95,Média) + cabeçalho
+        # rowHeight ~28px, header ~32px = 28*6 + 32 = 200px
+        self.table_cenarios.setMinimumHeight(200)
+        self.table_cenarios.setMaximumHeight(230)
+        self.table_cenarios.verticalHeader().setDefaultSectionSize(28)
+        
         self.table_cenarios.setStyleSheet("""
             QTableWidget {
                 background-color: white;
-                border: 1px solid #E5E7EB;
-                border-radius: 6px;
+                border: none;
                 gridline-color: #F3F4F6;
+                font-size: 12px;
             }
             QTableWidget::item {
-                padding: 6px 8px;
+                padding: 4px 6px;
+                border-bottom: 1px solid #F3F4F6;
             }
             QTableWidget::item:selected {
                 background-color: #DBEAFE;
@@ -996,7 +1002,7 @@ class ModernMainWindow(QMainWindow):
                 background-color: #F9FAFB;
                 border: none;
                 border-bottom: 2px solid #E5E7EB;
-                padding: 8px;
+                padding: 6px 8px;
                 font-weight: 600;
                 font-size: 11px;
                 color: #374151;
@@ -1006,7 +1012,7 @@ class ModernMainWindow(QMainWindow):
         self.table_cenarios.cellDoubleClicked.connect(self._on_cenario_double_clicked)
         scenarios_inner.addWidget(self.table_cenarios)
         
-        projection_main.addWidget(scenarios_frame, stretch=40)
+        projection_main.addWidget(scenarios_frame, stretch=35)
         
         self.charts_tabs.addTab(projection_tab, "📊 Projeção")
         
