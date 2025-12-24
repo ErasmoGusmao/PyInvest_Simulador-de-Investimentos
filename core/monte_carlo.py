@@ -185,6 +185,22 @@ class MonteCarloInput:
 
 
 @dataclass
+class RepresentativeScenario:
+    """
+    Cenário representativo de um percentil específico.
+    Contém os parâmetros REAIS que foram usados na simulação Monte Carlo
+    e que geraram um saldo final próximo ao percentil desejado.
+    """
+    scenario_name: str          # "P5 (Pessimista)", "P50 (Mediana)", etc.
+    percentile: str             # "P5", "P25", "P50", "P75", "P95"
+    capital_inicial: float      # Valor REAL usado nesta simulação
+    aporte_mensal: float        # Valor REAL usado nesta simulação
+    rentabilidade_anual: float  # Taxa REAL usada nesta simulação
+    saldo_final: float          # Resultado desta simulação
+    scenario_type: str          # "Worst Case", "Típico", "Best Case", etc.
+
+
+@dataclass
 class YearlyProjectionMC:
     """Projeção anual com dados de Monte Carlo."""
     year: int
@@ -195,11 +211,10 @@ class YearlyProjectionMC:
     balance_max: float
     balance_p10: float  # Percentil 10
     balance_p90: float  # Percentil 90
-    balance_p2_5: float = 0.0   # Percentil 2.5 (IC 95% inferior)
-    balance_p97_5: float = 0.0  # Percentil 97.5 (IC 95% superior)
+    balance_p5: float = 0.0    # Percentil 5 (IC 90% inferior)
+    balance_p95: float = 0.0   # Percentil 95 (IC 90% superior)
     extra_deposits: float = 0.0  # Aportes extras no ano
     withdrawals: float = 0.0     # Resgates no ano
-    balance_p97_5: float = 0.0  # Percentil 97.5 (IC 95% superior)
 
 
 @dataclass
@@ -215,8 +230,8 @@ class MonteCarloResult:
     balances_max: np.ndarray       # Máximo (melhor cenário)
     balances_p10: np.ndarray       # Percentil 10
     balances_p90: np.ndarray       # Percentil 90
-    balances_p2_5: np.ndarray      # IC 95% inferior (P2.5)
-    balances_p97_5: np.ndarray     # IC 95% superior (P97.5)
+    balances_p5: np.ndarray        # IC 90% inferior (P5)
+    balances_p95: np.ndarray       # IC 90% superior (P95)
     
     # Totais Determinísticos
     total_invested: float
@@ -244,6 +259,15 @@ class MonteCarloResult:
     # Insolvência (mês onde ocorreu, se houver)
     insolvency_month: Optional[int] = None
     insolvency_year: Optional[float] = None
+    
+    # Cenários representativos (parâmetros REAIS de cada percentil)
+    representative_scenarios: List[RepresentativeScenario] = field(default_factory=list)
+    
+    # Parâmetros amostrados (para análise posterior, se necessário)
+    sampled_capitals: Optional[np.ndarray] = None
+    sampled_monthlies: Optional[np.ndarray] = None
+    sampled_rates: Optional[np.ndarray] = None
+    sampled_final_balances: Optional[np.ndarray] = None
 
 
 class MonteCarloEngine:
@@ -366,9 +390,20 @@ class MonteCarloEngine:
         # Verificar se há parâmetros probabilísticos
         has_mc = self.inputs.has_probabilistic_params()
         
+        # Variáveis para armazenar dados Monte Carlo
+        sampled_capitals = None
+        sampled_monthlies = None
+        sampled_rates = None
+        sampled_final_balances = None
+        representative_scenarios = []
+        
         if has_mc:
-            # Executar Monte Carlo COM eventos
-            all_balances = self._calculate_monte_carlo_with_events(monthly_events)
+            # Executar Monte Carlo COM eventos - agora retorna também os parâmetros
+            all_balances, sampled_capitals, sampled_monthlies, sampled_rates = \
+                self._calculate_monte_carlo_with_events(monthly_events)
+            
+            # Saldos finais para análise
+            sampled_final_balances = all_balances[:, -1]
             
             # Calcular estatísticas
             balances_mean = np.mean(all_balances, axis=0)
@@ -377,13 +412,21 @@ class MonteCarloEngine:
             balances_p10 = np.percentile(all_balances, 10, axis=0)
             balances_p90 = np.percentile(all_balances, 90, axis=0)
             
-            # IC 95% (Percentis 2.5 e 97.5)
-            balances_p2_5 = np.percentile(all_balances, 2.5, axis=0)
-            balances_p97_5 = np.percentile(all_balances, 97.5, axis=0)
+            # IC 90% (Percentis 5 e 95)
+            balances_p5 = np.percentile(all_balances, 5, axis=0)
+            balances_p95 = np.percentile(all_balances, 95, axis=0)
             
             final_balance_mean = balances_mean[-1]
             final_balance_min = balances_min[-1]
             final_balance_max = balances_max[-1]
+            
+            # Extrair cenários representativos (parâmetros REAIS de cada percentil)
+            representative_scenarios = extract_representative_scenarios(
+                sampled_final_balances,
+                sampled_capitals,
+                sampled_monthlies,
+                sampled_rates
+            )
         else:
             # Sem Monte Carlo - usar valores determinísticos
             balances_mean = balances_det.copy()
@@ -391,8 +434,8 @@ class MonteCarloEngine:
             balances_max = balances_det.copy()
             balances_p10 = balances_det.copy()
             balances_p90 = balances_det.copy()
-            balances_p2_5 = balances_det.copy()
-            balances_p97_5 = balances_det.copy()
+            balances_p5 = balances_det.copy()
+            balances_p95 = balances_det.copy()
             
             final_balance_mean = final_balance_det
             final_balance_min = final_balance_det
@@ -422,8 +465,8 @@ class MonteCarloEngine:
                 balance_max=balances_max[month_idx],
                 balance_p10=balances_p10[month_idx],
                 balance_p90=balances_p90[month_idx],
-                balance_p2_5=balances_p2_5[month_idx],
-                balance_p97_5=balances_p97_5[month_idx],
+                balance_p5=balances_p5[month_idx],
+                balance_p95=balances_p95[month_idx],
                 extra_deposits=extra_deps,
                 withdrawals=withdrawals
             ))
@@ -448,8 +491,8 @@ class MonteCarloEngine:
             balances_max=balances_max,
             balances_p10=balances_p10,
             balances_p90=balances_p90,
-            balances_p2_5=balances_p2_5,
-            balances_p97_5=balances_p97_5,
+            balances_p5=balances_p5,
+            balances_p95=balances_p95,
             total_invested=total_invested,
             total_interest_det=total_interest_det,
             final_balance_det=final_balance_det,
@@ -462,7 +505,13 @@ class MonteCarloEngine:
             params_used=params_used,
             yearly_events=yearly_events,
             insolvency_month=insolvency_month,
-            insolvency_year=insolvency_month / 12 if insolvency_month else None
+            insolvency_year=insolvency_month / 12 if insolvency_month else None,
+            # Novos campos: cenários representativos com parâmetros REAIS
+            representative_scenarios=representative_scenarios,
+            sampled_capitals=sampled_capitals,
+            sampled_monthlies=sampled_monthlies,
+            sampled_rates=sampled_rates,
+            sampled_final_balances=sampled_final_balances
         )
     
     def _calculate_with_events(
@@ -519,11 +568,18 @@ class MonteCarloEngine:
     def _calculate_monte_carlo_with_events(
         self,
         monthly_events: Dict[int, Tuple[float, float]]
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa simulação Monte Carlo vetorizada com eventos.
         
         Os eventos são fixos (nominais) em todos os cenários.
+        
+        Returns:
+            Tuple contendo:
+            - all_balances: Matriz (n_sim x meses) com saldos
+            - initials: Array com capitais iniciais amostrados
+            - monthlies: Array com aportes mensais amostrados
+            - rates: Array com taxas anuais amostradas
         """
         n = self.inputs.n_simulations
         years = self.inputs.periodo_anos
@@ -557,7 +613,74 @@ class MonteCarloEngine:
             # Garantir não negativo
             all_balances[:, m] = np.maximum(0, all_balances[:, m])
         
-        return all_balances
+        return all_balances, initials, monthlies, rates
+
+
+def extract_representative_scenarios(
+    final_balances: np.ndarray,
+    capitals: np.ndarray,
+    monthlies: np.ndarray,
+    rates: np.ndarray
+) -> List[RepresentativeScenario]:
+    """
+    Extrai cenários representativos para cada percentil.
+    
+    Para cada percentil, encontra a simulação cujo saldo final
+    está mais próximo do valor do percentil e retorna seus
+    parâmetros REAIS.
+    
+    Args:
+        final_balances: Array com saldos finais de todas as simulações
+        capitals: Array com capitais iniciais amostrados
+        monthlies: Array com aportes mensais amostrados
+        rates: Array com taxas anuais amostradas
+        
+    Returns:
+        Lista de RepresentativeScenario para cada percentil
+    """
+    scenarios_config = [
+        ("P5 (Pessimista)", "P5", 5, "Worst Case"),
+        ("P25 (Conservador)", "P25", 25, "Conservador"),
+        ("P50 (Mediana)", "P50", 50, "Típico"),
+        ("P75 (Bom)", "P75", 75, "Otimista"),
+        ("P95 (Otimista)", "P95", 95, "Best Case"),
+    ]
+    
+    results = []
+    
+    for name, percentile_label, percentile_value, scenario_type in scenarios_config:
+        # Calcular o valor do percentil
+        target_balance = float(np.percentile(final_balances, percentile_value))
+        
+        # Encontrar o índice da simulação mais próxima deste percentil
+        idx = int(np.argmin(np.abs(final_balances - target_balance)))
+        
+        # Extrair os parâmetros REAIS desta simulação
+        results.append(RepresentativeScenario(
+            scenario_name=name,
+            percentile=percentile_label,
+            capital_inicial=float(capitals[idx]),
+            aporte_mensal=float(monthlies[idx]),
+            rentabilidade_anual=float(rates[idx]),
+            saldo_final=float(final_balances[idx]),
+            scenario_type=scenario_type
+        ))
+    
+    # Adicionar cenário da Média (simulação mais próxima da média)
+    mean_balance = float(np.mean(final_balances))
+    idx_mean = int(np.argmin(np.abs(final_balances - mean_balance)))
+    
+    results.append(RepresentativeScenario(
+        scenario_name="Média",
+        percentile="MÉDIA",
+        capital_inicial=float(capitals[idx_mean]),
+        aporte_mensal=float(monthlies[idx_mean]),
+        rentabilidade_anual=float(rates[idx_mean]),
+        saldo_final=float(final_balances[idx_mean]),
+        scenario_type="Valor Esperado"
+    ))
+    
+    return results
 
 
 # =============================================================================

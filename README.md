@@ -6,7 +6,27 @@ Uma aplicação desktop moderna para simulação de investimentos com juros comp
 ![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)
 ![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Monte Carlo](https://img.shields.io/badge/Monte_Carlo-5000_cenários-orange.svg)
+![Monte Carlo](https://img.shields.io/badge/Monte_Carlo-50000_cenários-orange.svg)
+
+## ✨ Novidades v4.2 (Cenários Reproduzíveis Reais + IC 90%)
+
+### 🎯 Correção Importante: Cenários Representativos
+- **Problema corrigido**: A tabela "Cenários Reproduzíveis" agora mostra os parâmetros **REAIS** usados na simulação Monte Carlo
+- **Antes**: Calculava taxas implícitas com capital/aporte fixos (inconsistente)
+- **Agora**: Identifica as simulações reais que geraram cada percentil (P5, P25, P50, P75, P95)
+- Cada cenário é **100% reproduzível** - use os parâmetros exatos para obter o mesmo resultado
+
+### 📊 Como Funciona
+1. O Monte Carlo executa N simulações (até 50.000)
+2. Cada simulação usa combinação aleatória de (Capital × Aporte × Taxa)
+3. Para cada percentil, encontramos a simulação **mais próxima** daquele valor
+4. Extraímos os parâmetros **reais** daquela simulação específica
+
+### 📉 Intervalo de Confiança Ajustado (IC 90%)
+- **Alteração**: Túnel de confiança agora usa **P5-P95** (antes era P2.5-P97.5)
+- **Por quê?** IC 90% é mais prático para planejamento financeiro
+- **Na prática**: Faixa mais estreita e menos influenciada por outliers extremos
+- **Visualização**: Legenda atualizada para "Intervalo de Confiança 90%"
 
 ## ✨ Novidades v3.1 (Modern UI + Plotly)
 
@@ -55,10 +75,23 @@ Uma aplicação desktop moderna para simulação de investimentos com juros comp
 ### Análise Monte Carlo
 | Funcionalidade | Descrição |
 |----------------|-----------|
-| 📊 5.000 simulações | Configurável de 100 a 50.000 |
+| 📊 50.000 simulações | Configurável de 100 a 50.000 |
 | 📈 Distribuição Normal | μ = (Min+Max)/2, σ = (Max-Min)/6 |
-| 🎯 Túnel de Confiança | Intervalo P10-P90 e Min-Max |
+| 🎯 Túnel de Confiança | Intervalo P5-P95 (IC 90%) e Min-Max |
 | ⚡ Execução Paralela | QThread para não travar a UI |
+| 🔄 Cenários Reproduzíveis | Parâmetros REAIS de cada percentil |
+
+### Tabela de Cenários Reproduzíveis (v4.2)
+
+A tabela mostra os parâmetros **exatos** que geraram cada percentil na simulação:
+
+| Cenário | Percentil | Capital Inicial | Aporte Mensal | Rent. Anual | Saldo Final |
+|---------|-----------|-----------------|---------------|-------------|-------------|
+| P5 (Pessimista) | P5 | R$ 1.312.456 | R$ 2.345 | 15,00% | R$ 6.034.846 |
+| P50 (Mediana) | P50 | R$ 1.423.789 | R$ 5.123 | 15,00% | R$ 6.969.179 |
+| P95 (Otimista) | P95 | R$ 1.489.234 | R$ 7.654 | 15,00% | R$ 7.891.234 |
+
+> **Nota**: Os valores de Capital e Aporte agora **variam** conforme o range definido!
 
 ## 🗂️ Estrutura do Projeto
 

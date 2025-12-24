@@ -111,7 +111,7 @@ class EvolutionChartPlotly(PlotlyChartWidget):
         color_primary = '#10B981'      # Verde (determinístico)
         color_mean = '#EF4444'         # Vermelho (média MC)
         color_tunnel_outer = 'rgba(59, 130, 246, 0.08)'   # Min-Max (azul muito claro)
-        color_tunnel_ic95 = 'rgba(59, 130, 246, 0.18)'    # IC 95% (azul médio)
+        color_tunnel_ic90 = 'rgba(59, 130, 246, 0.18)'    # IC 90% (azul médio)
         color_tunnel_border = 'rgba(59, 130, 246, 0.4)'
         
         # === CAMADA 1: Túnel Total (Min-Max) - mais externo ===
@@ -140,48 +140,48 @@ class EvolutionChartPlotly(PlotlyChartWidget):
                 hoverinfo='skip'
             ))
             
-            # === CAMADA 2: Intervalo de Confiança 95% (P2.5 - P97.5) ===
+            # === CAMADA 2: Intervalo de Confiança 90% (P5 - P95) ===
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_p97_5,
+                y=result.balances_p95,
                 mode='lines',
                 line=dict(width=0),
                 showlegend=False,
                 hoverinfo='skip',
-                name='_p97_5'
+                name='_p95'
             ))
             
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_p2_5,
+                y=result.balances_p5,
                 mode='lines',
                 line=dict(width=0),
                 fill='tonexty',
-                fillcolor=color_tunnel_ic95,
+                fillcolor=color_tunnel_ic90,
                 showlegend=True,
-                name='Intervalo de Confiança 95%',
+                name='Intervalo de Confiança 90%',
                 hoverinfo='skip'
             ))
             
-            # Bordas do túnel IC 95% (linhas finas tracejadas)
+            # Bordas do túnel IC 90% (linhas finas tracejadas)
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_p97_5,
+                y=result.balances_p95,
                 mode='lines',
                 line=dict(color=color_tunnel_border, width=1, dash='dot'),
                 showlegend=False,
-                hovertemplate='P97.5: R$ %{y:,.2f}<extra></extra>',
-                name='P97.5'
+                hovertemplate='P95: R$ %{y:,.2f}<extra></extra>',
+                name='P95'
             ))
             
             fig.add_trace(go.Scatter(
                 x=years,
-                y=result.balances_p2_5,
+                y=result.balances_p5,
                 mode='lines',
                 line=dict(color=color_tunnel_border, width=1, dash='dot'),
                 showlegend=False,
-                hovertemplate='P2.5: R$ %{y:,.2f}<extra></extra>',
-                name='P2.5'
+                hovertemplate='P5: R$ %{y:,.2f}<extra></extra>',
+                name='P5'
             ))
             
             # === CAMADA 3: Linha Média Monte Carlo (tracejada) ===
