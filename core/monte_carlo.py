@@ -207,14 +207,16 @@ class YearlyProjectionMC:
     total_invested: float
     balance_deterministic: float
     balance_mean: float
+    balance_median: float       # Mediana (P50)
+    balance_mode: float         # Moda (valor mais frequente)
     balance_min: float
     balance_max: float
-    balance_p10: float  # Percentil 10
-    balance_p90: float  # Percentil 90
-    balance_p5: float = 0.0    # Percentil 5 (IC 90% inferior)
-    balance_p95: float = 0.0   # Percentil 95 (IC 90% superior)
-    extra_deposits: float = 0.0  # Aportes extras no ano
-    withdrawals: float = 0.0     # Resgates no ano
+    balance_p5: float           # Percentil 5
+    balance_p10: float          # Percentil 10
+    balance_p90: float          # Percentil 90
+    balance_p95: float = 0.0    # Percentil 95 (IC 90% superior)
+    extra_deposits: float = 0.0   # Aportes extras no ano
+    withdrawals: float = 0.0      # Resgates no ano
 
 
 @dataclass
@@ -407,6 +409,7 @@ class MonteCarloEngine:
             
             # Calcular estatísticas
             balances_mean = np.mean(all_balances, axis=0)
+            balances_median = np.median(all_balances, axis=0)
             balances_min = np.min(all_balances, axis=0)
             balances_max = np.max(all_balances, axis=0)
             balances_p10 = np.percentile(all_balances, 10, axis=0)
@@ -415,6 +418,13 @@ class MonteCarloEngine:
             # IC 90% (Percentis 5 e 95)
             balances_p5 = np.percentile(all_balances, 5, axis=0)
             balances_p95 = np.percentile(all_balances, 95, axis=0)
+            
+            # Moda aproximada (usando histograma para cada mês)
+            balances_mode = np.zeros(all_balances.shape[1])
+            for i in range(all_balances.shape[1]):
+                hist, bin_edges = np.histogram(all_balances[:, i], bins=50)
+                mode_idx = np.argmax(hist)
+                balances_mode[i] = (bin_edges[mode_idx] + bin_edges[mode_idx + 1]) / 2
             
             final_balance_mean = balances_mean[-1]
             final_balance_min = balances_min[-1]
@@ -430,6 +440,8 @@ class MonteCarloEngine:
         else:
             # Sem Monte Carlo - usar valores determinísticos
             balances_mean = balances_det.copy()
+            balances_median = balances_det.copy()
+            balances_mode = balances_det.copy()
             balances_min = balances_det.copy()
             balances_max = balances_det.copy()
             balances_p10 = balances_det.copy()
@@ -461,11 +473,13 @@ class MonteCarloEngine:
                 total_invested=invested,
                 balance_deterministic=balances_det[month_idx],
                 balance_mean=balances_mean[month_idx],
+                balance_median=balances_median[month_idx],
+                balance_mode=balances_mode[month_idx],
                 balance_min=balances_min[month_idx],
                 balance_max=balances_max[month_idx],
+                balance_p5=balances_p5[month_idx],
                 balance_p10=balances_p10[month_idx],
                 balance_p90=balances_p90[month_idx],
-                balance_p5=balances_p5[month_idx],
                 balance_p95=balances_p95[month_idx],
                 extra_deposits=extra_deps,
                 withdrawals=withdrawals

@@ -961,7 +961,7 @@ class ProjectionTable(QTableWidget):
                         fieldnames.extend(['Aportes Extras', 'Resgates'])
                     
                     fieldnames.extend([
-                        'Saldo (Det.)', 'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+                        'Saldo (Det.)', 'Média', 'Mediana', 'Moda', 'Mín', 'P5', 'P90', 'Máx'
                     ])
                 else:
                     # Formato antigo
@@ -1015,16 +1015,16 @@ class ProjectionTable(QTableWidget):
         
         # Reconfigurar colunas para Monte Carlo
         if has_events:
-            self.setColumnCount(8)
+            self.setColumnCount(12)
             self.setHorizontalHeaderLabels([
                 'Ano', 'Total Investido', 'Aportes Extras', 'Resgates',
-                'Saldo (Det.)', 'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+                'Saldo (Det.)', 'Média', 'Mediana', 'Moda', 'Mín', 'P5', 'P90', 'Máx'
             ])
         else:
-            self.setColumnCount(6)
+            self.setColumnCount(10)
             self.setHorizontalHeaderLabels([
                 'Ano', 'Total Investido', 'Saldo (Det.)', 
-                'Saldo (Média)', 'Saldo (Mín)', 'Saldo (Máx)'
+                'Média', 'Mediana', 'Moda', 'Mín', 'P5', 'P90', 'Máx'
             ])
         
         # Reconfigurar header
@@ -1050,9 +1050,13 @@ class ProjectionTable(QTableWidget):
                 'Ano': proj.year,
                 'Total Investido': proj.total_invested,
                 'Saldo (Det.)': proj.balance_deterministic,
-                'Saldo (Média)': proj.balance_mean,
-                'Saldo (Mín)': proj.balance_min,
-                'Saldo (Máx)': proj.balance_max
+                'Média': proj.balance_mean,
+                'Mediana': getattr(proj, 'balance_median', proj.balance_mean),
+                'Moda': getattr(proj, 'balance_mode', proj.balance_mean),
+                'Mín': proj.balance_min,
+                'P5': getattr(proj, 'balance_p5', proj.balance_min),
+                'P90': proj.balance_p90,
+                'Máx': proj.balance_max
             }
             
             if has_events:
@@ -1122,7 +1126,7 @@ class ProjectionTable(QTableWidget):
             self.setItem(row, col_idx, det_item)
             col_idx += 1
             
-            # Saldo Média (vermelho suave)
+            # Média (vermelho suave)
             mean_item = QTableWidgetItem(format_currency(proj.balance_mean))
             mean_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             mean_item.setForeground(QColor('#e74c3c'))
@@ -1130,7 +1134,25 @@ class ProjectionTable(QTableWidget):
             self.setItem(row, col_idx, mean_item)
             col_idx += 1
             
-            # Saldo Mínimo
+            # Mediana (roxo)
+            median_value = getattr(proj, 'balance_median', proj.balance_mean)
+            median_item = QTableWidgetItem(format_currency(median_value))
+            median_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            median_item.setForeground(QColor('#9b59b6'))
+            median_item.setBackground(bg_color)
+            self.setItem(row, col_idx, median_item)
+            col_idx += 1
+            
+            # Moda (laranja)
+            mode_value = getattr(proj, 'balance_mode', proj.balance_mean)
+            mode_item = QTableWidgetItem(format_currency(mode_value))
+            mode_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            mode_item.setForeground(QColor('#e67e22'))
+            mode_item.setBackground(bg_color)
+            self.setItem(row, col_idx, mode_item)
+            col_idx += 1
+            
+            # Mínimo (cinza)
             min_item = QTableWidgetItem(format_currency(proj.balance_min))
             min_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             min_item.setForeground(QColor('#7f8c8d'))
@@ -1138,30 +1160,29 @@ class ProjectionTable(QTableWidget):
             self.setItem(row, col_idx, min_item)
             col_idx += 1
             
-            # Saldo Máximo
+            # P5 (vermelho escuro)
+            p5_value = getattr(proj, 'balance_p5', proj.balance_min)
+            p5_item = QTableWidgetItem(format_currency(p5_value))
+            p5_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            p5_item.setForeground(QColor('#c0392b'))
+            p5_item.setBackground(bg_color)
+            self.setItem(row, col_idx, p5_item)
+            col_idx += 1
+            
+            # P90 (verde)
+            p90_item = QTableWidgetItem(format_currency(proj.balance_p90))
+            p90_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            p90_item.setForeground(QColor('#27ae60'))
+            p90_item.setBackground(bg_color)
+            self.setItem(row, col_idx, p90_item)
+            col_idx += 1
+            
+            # Máximo (azul)
             max_item = QTableWidgetItem(format_currency(proj.balance_max))
             max_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             max_item.setForeground(QColor('#3498db'))
             max_item.setBackground(bg_color)
             self.setItem(row, col_idx, max_item)
-    
-    def reset_columns(self):
-        """Reseta para configuração original (5 colunas)."""
-        self.setColumnCount(5)
-        self.setHorizontalHeaderLabels([
-            'Ano', 'Aportes Acum. (R$)', 'Juros Acum. (R$)', 
-            'Saldo Total (R$)', '% do Alvo'
-        ])
-        
-        for col in range(self.columnCount()):
-            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
-            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.setHorizontalHeaderItem(col, header_item)
-        
-        header = self.horizontalHeader()
-        for col in range(5):
-            header.setSectionResizeMode(col, QHeaderView.Stretch)
-        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
 
 class AnalysisBox(QFrame):
