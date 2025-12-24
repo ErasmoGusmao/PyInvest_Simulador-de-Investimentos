@@ -2024,12 +2024,18 @@ class ModernMainWindow(QMainWindow):
             # =====================================================================
             
             # Gráfico de distribuição (histograma)
-            self.distribution_chart.update_chart(
-                list(simulated_balances),
-                self.percentile_stats,
-                meta,
-                final_year.balance_deterministic
-            )
+            if result.has_monte_carlo and len(simulated_balances) > 1:
+                self.distribution_chart.update_chart(
+                    list(simulated_balances),
+                    self.percentile_stats,
+                    meta,
+                    final_year.balance_deterministic
+                )
+            else:
+                # Modo determinístico: mostrar mensagem informativa
+                self.distribution_chart._show_deterministic_message(
+                    final_year.balance_deterministic
+                )
             
             # (Gráfico Expert removido - interface simplificada para 3 abas)
             

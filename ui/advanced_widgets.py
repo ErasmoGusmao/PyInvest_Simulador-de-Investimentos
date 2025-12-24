@@ -385,6 +385,30 @@ class DistributionChart(QWidget):
         """
         self.chart_view.setHtml(html)
     
+    def _show_deterministic_message(self, final_balance: float):
+        """Mostra mensagem quando em modo determinístico (sem variabilidade)."""
+        # Formatar valor
+        valor_fmt = f"R$ {final_balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        html = f"""
+        <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;
+                    height:100%;color:#6B7280;font-family:sans-serif;text-align:center;padding:20px;">
+            <div style="font-size:48px;margin-bottom:16px;">📊</div>
+            <div style="font-size:16px;font-weight:600;color:#374151;margin-bottom:12px;">
+                Modo Determinístico
+            </div>
+            <div style="font-size:14px;line-height:1.6;max-width:400px;">
+                Não há distribuição para exibir porque todos os parâmetros são fixos.<br><br>
+                <b>Saldo Final Único:</b> {valor_fmt}<br><br>
+                <span style="color:#9CA3AF;font-size:12px;">
+                    💡 Para ver a distribuição, defina valores Mín/Máx nos parâmetros<br>
+                    (Capital, Aporte ou Rentabilidade)
+                </span>
+            </div>
+        </div>
+        """
+        self.chart_view.setHtml(html)
+    
     def update_chart(
         self, 
         final_balances: list,
@@ -395,7 +419,7 @@ class DistributionChart(QWidget):
         """Atualiza histograma com autosize responsivo."""
         import numpy as np
         
-        if not final_balances:
+        if not final_balances or len(final_balances) < 2:
             self._show_empty()
             return
         
@@ -403,12 +427,13 @@ class DistributionChart(QWidget):
         hist, bins = np.histogram(final_balances, bins=30)
         bin_centers = [(bins[i] + bins[i+1]) / 2 for i in range(len(bins)-1)]
         
-        # Converter para milhões para melhor visualização
-        bin_centers_m = [b / 1_000_000 for b in bin_centers]
-        meta_m = meta / 1_000_000
-        p50_m = stats.p50 / 1_000_000
-        p5_m = stats.p5 / 1_000_000
-        det_m = deterministic / 1_000_000 if deterministic else None
+        # Converter para milhões para melhor visualização (garantir tipos Python nativos)
+        bin_centers_m = [float(b) / 1_000_000 for b in bin_centers]
+        hist_list = [int(h) for h in hist]  # Converter np.int64 para int Python
+        meta_m = float(meta) / 1_000_000
+        p50_m = float(stats.p50) / 1_000_000
+        p5_m = float(stats.p5) / 1_000_000
+        det_m = float(deterministic) / 1_000_000 if deterministic else None
         
         # Construir shapes
         shapes_list = [
@@ -461,7 +486,7 @@ class DistributionChart(QWidget):
             <script>
                 var data = [{{
                     x: {bin_centers_m},
-                    y: {list(hist)},
+                    y: {hist_list},
                     type: 'bar',
                     marker: {{
                         color: 'rgba(59, 130, 246, 0.7)',
