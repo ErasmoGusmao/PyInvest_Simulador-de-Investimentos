@@ -959,19 +959,24 @@ class ModernMainWindow(QMainWindow):
         ])
         
         header_cenarios = self.table_cenarios.horizontalHeader()
-        header_cenarios.setSectionResizeMode(0, QHeaderView.Interactive)
-        header_cenarios.setSectionResizeMode(1, QHeaderView.Fixed)
-        header_cenarios.setSectionResizeMode(2, QHeaderView.Stretch)
-        header_cenarios.setSectionResizeMode(3, QHeaderView.Stretch)
-        header_cenarios.setSectionResizeMode(4, QHeaderView.Interactive)
-        header_cenarios.setSectionResizeMode(5, QHeaderView.Stretch)
         
-        self.table_cenarios.setColumnWidth(0, 150)
-        self.table_cenarios.setColumnWidth(1, 65)
-        self.table_cenarios.setColumnWidth(4, 90)
-        
+        # ========================================================
+        # MODO INTERACTIVE: Permite redimensionamento manual
+        # ========================================================
+        header_cenarios.setSectionResizeMode(QHeaderView.Interactive)
+        header_cenarios.setMinimumSectionSize(100)  # Proteção contra "R$..."
         header_cenarios.setStretchLastSection(True)
-        header_cenarios.setMinimumSectionSize(50)
+        
+        # Alinhamento centralizado dos cabeçalhos
+        header_cenarios.setDefaultAlignment(Qt.AlignCenter)
+        
+        # Larguras iniciais
+        self.table_cenarios.setColumnWidth(0, 150)
+        self.table_cenarios.setColumnWidth(1, 80)
+        self.table_cenarios.setColumnWidth(2, 130)
+        self.table_cenarios.setColumnWidth(3, 120)
+        self.table_cenarios.setColumnWidth(4, 100)
+        self.table_cenarios.setColumnWidth(5, 140)
         
         self.table_cenarios.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_cenarios.setAlternatingRowColors(True)
@@ -1862,24 +1867,34 @@ class ModernMainWindow(QMainWindow):
             rent_fmt = f"{s.rentabilidade_anual:.2f}%".replace(".", ",")
             saldo_fmt = f"R$ {s.saldo_final:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             
+            # Todos os itens CENTRALIZADOS
             items = [
-                (s.scenario_name, Qt.AlignLeft),
-                (s.percentile, Qt.AlignCenter),
-                (capital_fmt, Qt.AlignRight),
-                (aporte_fmt, Qt.AlignRight),
-                (rent_fmt, Qt.AlignRight),
-                (saldo_fmt, Qt.AlignRight),
+                s.scenario_name,
+                s.percentile,
+                capital_fmt,
+                aporte_fmt,
+                rent_fmt,
+                saldo_fmt,
             ]
             
-            for col, (text, align) in enumerate(items):
+            for col, text in enumerate(items):
                 item = QTableWidgetItem(text)
-                item.setTextAlignment(align | Qt.AlignVCenter)
+                item.setTextAlignment(Qt.AlignCenter)  # Centralizado
                 item.setBackground(bg_color)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # Não editável
                 self.table_cenarios.setItem(row, col, item)
         
         # Ajustar altura das linhas
         self.table_cenarios.resizeRowsToContents()
+        
+        # Ajustar largura das colunas ao conteúdo (corrige corte em "PERCENTIL")
+        self.table_cenarios.resizeColumnsToContents()
+        
+        # Garantir largura mínima após resize
+        min_widths = [120, 80, 130, 120, 100, 140]
+        for col, min_w in enumerate(min_widths):
+            if self.table_cenarios.columnWidth(col) < min_w:
+                self.table_cenarios.setColumnWidth(col, min_w)
     
     def _update_advanced_statistics(self, result: MonteCarloResult):
         """

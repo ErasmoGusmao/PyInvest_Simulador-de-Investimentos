@@ -825,12 +825,18 @@ class CompositionChart(FigureCanvas):
 
 
 class ProjectionTable(QTableWidget):
-    """Tabela de projeção anual com exportação CSV."""
+    """Tabela de projeção anual responsiva com navegação horizontal e exportação CSV."""
+    
+    # Larguras mínimas por tipo de coluna (em pixels)
+    MIN_WIDTH_ANO = 70
+    MIN_WIDTH_CURRENCY = 130  # Para valores monetários completos
+    MIN_WIDTH_PERCENT = 80
+    MIN_WIDTH_SMALL = 100     # Para colunas menores
     
     def __init__(self):
         super().__init__()
         
-        # Configuração
+        # Configuração inicial
         self.setColumnCount(5)
         self.setHorizontalHeaderLabels([
             'Ano', 'Aportes Acum. (R$)', 'Juros Acum. (R$)', 
@@ -838,44 +844,200 @@ class ProjectionTable(QTableWidget):
         ])
         
         # ========================================================
-        # ALINHAMENTO DOS CABEÇALHOS (programático)
-        # O QSS nem sempre aplica text-align no QHeaderView,
-        # então definimos via código para garantir.
+        # CONFIGURAÇÃO DE SCROLL HORIZONTAL
         # ========================================================
-        for col in range(self.columnCount()):
-            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
-            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.setHorizontalHeaderItem(col, header_item)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # ========================================================
+        # ALINHAMENTO DOS CABEÇALHOS
+        # ========================================================
+        self._setup_header_alignment()
         
         # Estilo
-        self.setAlternatingRowColors(False)  # Desabilitar alternância padrão
+        self.setAlternatingRowColors(False)
         self.setShowGrid(False)
         self.setSelectionBehavior(QTableWidget.SelectRows)
         self.verticalHeader().setVisible(False)
         
-        # Ajustar colunas - todas com Stretch para distribuição uniforme
-        header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.Stretch)
-        
-        # Alinhamento padrão do header (fallback)
-        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        # ========================================================
+        # DIMENSIONAMENTO RESPONSIVO: Stretch + Minimum Width
+        # ========================================================
+        self._configure_responsive_columns()
         
         # Altura das linhas
-        self.verticalHeader().setDefaultSectionSize(48)
+        self.verticalHeader().setDefaultSectionSize(40)
         
         # Dados para exportação
         self._export_data = []
+        
+        # Estilo da tabela
+        self.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+                gridline-color: #F3F4F6;
+            }
+            QTableWidget::item {
+                padding: 8px 12px;
+                border-bottom: 1px solid #F3F4F6;
+            }
+            QTableWidget::item:selected {
+                background-color: #DBEAFE;
+                color: #1E40AF;
+            }
+            QHeaderView::section {
+                background-color: #F9FAFB;
+                color: #374151;
+                font-weight: 600;
+                font-size: 11px;
+                padding: 10px 12px;
+                border: none;
+                border-bottom: 2px solid #E5E7EB;
+            }
+            QScrollBar:horizontal {
+                height: 10px;
+                background: #F3F4F6;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #D1D5DB;
+                border-radius: 5px;
+                min-width: 30px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #9CA3AF;
+            }
+        """)
+    
+    def _setup_header_alignment(self):
+        """Configura alinhamento dos cabeçalhos - CENTRALIZADO."""
+        header = self.horizontalHeader()
+        header.setDefaultAlignment(Qt.AlignCenter)
+        
+        for col in range(self.columnCount()):
+            header_item = QTableWidgetItem(
+                self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else ""
+            )
+            # Todos os cabeçalhos centralizados
+            header_item.setTextAlignment(Qt.AlignCenter)
+            self.setHorizontalHeaderItem(col, header_item)
+    
+    def _configure_responsive_columns(self):
+        """
+        Configura colunas responsivas: Stretch para preencher 100%,
+        com largura mínima para proteger contra compressão.
+        """
+        header = self.horizontalHeader()
+        
+        # Modo Stretch: distribui espaço uniformemente
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        
+        # Desabilitar stretch apenas na última coluna
+        # (todas as colunas dividem o espaço extra proporcionalmente)
+        header.setStretchLastSection(False)
+        
+        # Largura mínima global - proteção contra compressão
+        header.setMinimumSectionSize(self.MIN_WIDTH_CURRENCY)
+    
+    def _apply_minimum_widths(self, column_count: int, has_events: bool = False):
+        """
+        Aplica larguras mínimas e configura modo de redimensionamento.
+        
+        Lógica:
+        - Todas as configurações usam modo Interactive para redimensionamento manual
+        - 10 colunas: começa preenchendo a tela, permite ajuste manual
+        - 12 colunas: scroll horizontal obrigatório
+        """
+        header = self.horizontalHeader()
+        
+        # ========================================================
+        # MODO INTERACTIVE: Permite redimensionamento manual sempre
+        # ========================================================
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setMinimumSectionSize(100)  # Proteção contra "R$..."
+        
+        # Alinhamento centralizado dos cabeçalhos
+        header.setDefaultAlignment(Qt.AlignCenter)
+        
+        # Definir larguras mínimas por índice de coluna
+        if has_events:
+            # 12 colunas: Ano, Tot.Inv, Aportes, Resgates, Det, Média, Mediana, Moda, Mín, P5, P90, Máx
+            min_widths = [
+                self.MIN_WIDTH_ANO,       # 0: Ano
+                self.MIN_WIDTH_CURRENCY,  # 1: Total Investido
+                self.MIN_WIDTH_SMALL,     # 2: Aportes Extras
+                self.MIN_WIDTH_SMALL,     # 3: Resgates
+                self.MIN_WIDTH_CURRENCY,  # 4: Saldo (Det.)
+                self.MIN_WIDTH_CURRENCY,  # 5: Média
+                self.MIN_WIDTH_CURRENCY,  # 6: Mediana
+                self.MIN_WIDTH_CURRENCY,  # 7: Moda
+                self.MIN_WIDTH_CURRENCY,  # 8: Mín
+                self.MIN_WIDTH_SMALL,     # 9: P5
+                self.MIN_WIDTH_SMALL,     # 10: P90
+                self.MIN_WIDTH_CURRENCY,  # 11: Máx
+            ]
+            
+            # 12 colunas: Scroll horizontal obrigatório
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            header.setStretchLastSection(False)
+            
+        elif column_count == 10:
+            # 10 colunas MC sem eventos
+            min_widths = [
+                self.MIN_WIDTH_ANO,       # 0: Ano
+                self.MIN_WIDTH_CURRENCY,  # 1: Total Investido
+                self.MIN_WIDTH_CURRENCY,  # 2: Saldo (Det.)
+                self.MIN_WIDTH_CURRENCY,  # 3: Média
+                self.MIN_WIDTH_CURRENCY,  # 4: Mediana
+                self.MIN_WIDTH_CURRENCY,  # 5: Moda
+                self.MIN_WIDTH_CURRENCY,  # 6: Mín
+                self.MIN_WIDTH_SMALL,     # 7: P5
+                self.MIN_WIDTH_SMALL,     # 8: P90
+                self.MIN_WIDTH_CURRENCY,  # 9: Máx
+            ]
+            
+            # 10 colunas: Pode esticar, mas permite ajuste manual
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            header.setStretchLastSection(True)
+            
+        else:
+            # 5 colunas modo básico
+            min_widths = [
+                self.MIN_WIDTH_ANO,       # 0: Ano
+                self.MIN_WIDTH_CURRENCY,  # 1: Aportes Acum.
+                self.MIN_WIDTH_CURRENCY,  # 2: Juros Acum.
+                self.MIN_WIDTH_CURRENCY,  # 3: Saldo Total
+                self.MIN_WIDTH_PERCENT,   # 4: % do Alvo
+            ]
+            
+            # 5 colunas: estica para preencher
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            header.setStretchLastSection(True)
+        
+        # Aplicar larguras iniciais
+        for col, min_width in enumerate(min_widths[:column_count]):
+            self.setColumnWidth(col, min_width)
+        
+        # Redimensionar para conteúdo (ajuste inicial ideal)
+        self.resizeColumnsToContents()
+        
+        # Garantir que nenhuma coluna fique menor que o mínimo
+        for col, min_width in enumerate(min_widths[:column_count]):
+            if self.columnWidth(col) < min_width:
+                self.setColumnWidth(col, min_width)
     
     def update_data(self, result: SimulationResult):
         """Atualiza a tabela com os dados da projeção."""
         colors = get_colors()
         
         self.setRowCount(len(result.yearly_projection))
-        self._export_data = []  # Limpar dados anteriores
+        self._export_data = []
+        
+        # Aplicar larguras mínimas responsivas
+        self._apply_minimum_widths(5, has_events=False)
+        self._setup_header_alignment()
         
         for row, proj in enumerate(result.yearly_projection):
             # Guardar dados para exportação
@@ -887,12 +1049,11 @@ class ProjectionTable(QTableWidget):
                 '% do Alvo': proj.goal_percentage
             })
             
-            # Cor de fundo alternada (aplicada manualmente)
             bg_color = QColor('#ffffff') if row % 2 == 0 else QColor('#f8fffe')
             
-            # Ano - alinhado à esquerda
+            # Ano - CENTRALIZADO
             year_item = QTableWidgetItem(f"Ano {proj.year}")
-            year_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            year_item.setTextAlignment(Qt.AlignCenter)
             year_item.setForeground(QColor(colors['primary']))
             year_item.setBackground(bg_color)
             font = year_item.font()
@@ -900,23 +1061,23 @@ class ProjectionTable(QTableWidget):
             year_item.setFont(font)
             self.setItem(row, 0, year_item)
             
-            # Aportes acumulados - alinhado à esquerda
+            # Aportes acumulados - CENTRALIZADO
             contrib_item = QTableWidgetItem(format_currency(proj.accumulated_contribution))
-            contrib_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            contrib_item.setTextAlignment(Qt.AlignCenter)
             contrib_item.setBackground(bg_color)
             self.setItem(row, 1, contrib_item)
             
-            # Juros acumulados - alinhado à esquerda
+            # Juros acumulados - CENTRALIZADO
             interest_item = QTableWidgetItem(format_currency(proj.accumulated_interest))
-            interest_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            interest_item.setTextAlignment(Qt.AlignCenter)
             interest_item.setForeground(QColor(colors['success']))
             interest_item.setBackground(bg_color)
             self.setItem(row, 2, interest_item)
             
-            # Saldo total - alinhado à esquerda com DESTAQUE
+            # Saldo total - CENTRALIZADO com DESTAQUE
             balance_item = QTableWidgetItem(format_currency(proj.total_balance))
-            balance_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            balance_item.setForeground(QColor(colors['primary']))  # Cor verde-água
+            balance_item.setTextAlignment(Qt.AlignCenter)
+            balance_item.setForeground(QColor(colors['primary']))
             # Background com destaque suave na coluna de saldo
             highlight_bg = QColor('#e8f6f3') if row % 2 == 0 else QColor('#dff0ed')
             balance_item.setBackground(highlight_bg)
@@ -925,9 +1086,9 @@ class ProjectionTable(QTableWidget):
             balance_item.setFont(font)
             self.setItem(row, 3, balance_item)
             
-            # % do alvo - alinhado à esquerda
+            # % do alvo - CENTRALIZADO
             pct_item = QTableWidgetItem(f"{proj.goal_percentage:.1f}%")
-            pct_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            pct_item.setTextAlignment(Qt.AlignCenter)
             pct_item.setBackground(bg_color)
             self.setItem(row, 4, pct_item)
     
@@ -1027,16 +1188,14 @@ class ProjectionTable(QTableWidget):
                 'Média', 'Mediana', 'Moda', 'Mín', 'P5', 'P90', 'Máx'
             ])
         
-        # Reconfigurar header
-        for col in range(self.columnCount()):
-            header_item = QTableWidgetItem(self.horizontalHeaderItem(col).text() if self.horizontalHeaderItem(col) else "")
-            header_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.setHorizontalHeaderItem(col, header_item)
+        # ========================================================
+        # CONFIGURAÇÃO RESPONSIVA: Stretch + Minimum Width
+        # ========================================================
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
-        header = self.horizontalHeader()
-        for col in range(self.columnCount()):
-            header.setSectionResizeMode(col, QHeaderView.Stretch)
-        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        # Aplicar larguras mínimas e alinhamento
+        self._apply_minimum_widths(self.columnCount(), has_events=has_events)
+        self._setup_header_alignment()
         
         self.setRowCount(len(result.yearly_projection))
         self._export_data = []
@@ -1068,9 +1227,9 @@ class ProjectionTable(QTableWidget):
             bg_color = QColor('#ffffff') if row % 2 == 0 else QColor('#f8fffe')
             col_idx = 0
             
-            # Ano
+            # Ano - CENTRALIZADO
             year_item = QTableWidgetItem(f"Ano {proj.year}")
-            year_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            year_item.setTextAlignment(Qt.AlignCenter)
             year_item.setForeground(QColor(colors['primary']))
             year_item.setBackground(bg_color)
             font = year_item.font()
@@ -1079,20 +1238,20 @@ class ProjectionTable(QTableWidget):
             self.setItem(row, col_idx, year_item)
             col_idx += 1
             
-            # Total Investido
+            # Total Investido - CENTRALIZADO
             invested_item = QTableWidgetItem(format_currency(proj.total_invested))
-            invested_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            invested_item.setTextAlignment(Qt.AlignCenter)
             invested_item.setBackground(bg_color)
             self.setItem(row, col_idx, invested_item)
             col_idx += 1
             
             # Colunas de eventos (se houver)
             if has_events:
-                # Aportes Extras
+                # Aportes Extras - CENTRALIZADO
                 deposits_item = QTableWidgetItem(
                     format_currency(extra_deposits) if extra_deposits > 0 else "—"
                 )
-                deposits_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                deposits_item.setTextAlignment(Qt.AlignCenter)
                 if extra_deposits > 0:
                     deposits_item.setForeground(QColor('#059669'))
                 else:
@@ -1101,11 +1260,11 @@ class ProjectionTable(QTableWidget):
                 self.setItem(row, col_idx, deposits_item)
                 col_idx += 1
                 
-                # Resgates
+                # Resgates - CENTRALIZADO
                 withdrawals_item = QTableWidgetItem(
                     format_currency(withdrawals) if withdrawals > 0 else "—"
                 )
-                withdrawals_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                withdrawals_item.setTextAlignment(Qt.AlignCenter)
                 if withdrawals > 0:
                     withdrawals_item.setForeground(QColor('#DC2626'))
                 else:
@@ -1114,9 +1273,9 @@ class ProjectionTable(QTableWidget):
                 self.setItem(row, col_idx, withdrawals_item)
                 col_idx += 1
             
-            # Saldo Determinístico (destacado)
+            # Saldo Determinístico (destacado) - CENTRALIZADO
             det_item = QTableWidgetItem(format_currency(proj.balance_deterministic))
-            det_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            det_item.setTextAlignment(Qt.AlignCenter)
             det_item.setForeground(QColor(colors['primary']))
             highlight_bg = QColor('#e8f6f3') if row % 2 == 0 else QColor('#dff0ed')
             det_item.setBackground(highlight_bg)
@@ -1126,60 +1285,60 @@ class ProjectionTable(QTableWidget):
             self.setItem(row, col_idx, det_item)
             col_idx += 1
             
-            # Média (vermelho suave)
+            # Média (vermelho suave) - CENTRALIZADO
             mean_item = QTableWidgetItem(format_currency(proj.balance_mean))
-            mean_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            mean_item.setTextAlignment(Qt.AlignCenter)
             mean_item.setForeground(QColor('#e74c3c'))
             mean_item.setBackground(bg_color)
             self.setItem(row, col_idx, mean_item)
             col_idx += 1
             
-            # Mediana (roxo)
+            # Mediana (roxo) - CENTRALIZADO
             median_value = getattr(proj, 'balance_median', proj.balance_mean)
             median_item = QTableWidgetItem(format_currency(median_value))
-            median_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            median_item.setTextAlignment(Qt.AlignCenter)
             median_item.setForeground(QColor('#9b59b6'))
             median_item.setBackground(bg_color)
             self.setItem(row, col_idx, median_item)
             col_idx += 1
             
-            # Moda (laranja)
+            # Moda (laranja) - CENTRALIZADO
             mode_value = getattr(proj, 'balance_mode', proj.balance_mean)
             mode_item = QTableWidgetItem(format_currency(mode_value))
-            mode_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            mode_item.setTextAlignment(Qt.AlignCenter)
             mode_item.setForeground(QColor('#e67e22'))
             mode_item.setBackground(bg_color)
             self.setItem(row, col_idx, mode_item)
             col_idx += 1
             
-            # Mínimo (cinza)
+            # Mínimo (cinza) - CENTRALIZADO
             min_item = QTableWidgetItem(format_currency(proj.balance_min))
-            min_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            min_item.setTextAlignment(Qt.AlignCenter)
             min_item.setForeground(QColor('#7f8c8d'))
             min_item.setBackground(bg_color)
             self.setItem(row, col_idx, min_item)
             col_idx += 1
             
-            # P5 (vermelho escuro)
+            # P5 (vermelho escuro) - CENTRALIZADO
             p5_value = getattr(proj, 'balance_p5', proj.balance_min)
             p5_item = QTableWidgetItem(format_currency(p5_value))
-            p5_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            p5_item.setTextAlignment(Qt.AlignCenter)
             p5_item.setForeground(QColor('#c0392b'))
             p5_item.setBackground(bg_color)
             self.setItem(row, col_idx, p5_item)
             col_idx += 1
             
-            # P90 (verde)
+            # P90 (verde) - CENTRALIZADO
             p90_item = QTableWidgetItem(format_currency(proj.balance_p90))
-            p90_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            p90_item.setTextAlignment(Qt.AlignCenter)
             p90_item.setForeground(QColor('#27ae60'))
             p90_item.setBackground(bg_color)
             self.setItem(row, col_idx, p90_item)
             col_idx += 1
             
-            # Máximo (azul)
+            # Máximo (azul) - CENTRALIZADO
             max_item = QTableWidgetItem(format_currency(proj.balance_max))
-            max_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            max_item.setTextAlignment(Qt.AlignCenter)
             max_item.setForeground(QColor('#3498db'))
             max_item.setBackground(bg_color)
             self.setItem(row, col_idx, max_item)

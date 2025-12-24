@@ -47,6 +47,13 @@ class EventsDialog(QDialog):
         self.setMinimumSize(900, 550)
         self.setModal(True)
         
+        # Habilitar botões de maximizar e minimizar
+        self.setWindowFlags(
+            self.windowFlags() | 
+            Qt.WindowMaximizeButtonHint | 
+            Qt.WindowMinimizeButtonHint
+        )
+        
         # Estilo do diálogo
         self.setStyleSheet("""
             QDialog {
@@ -62,10 +69,10 @@ class EventsDialog(QDialog):
                 color: #6B7280;
             }
             QPushButton {
-                padding: 10px 20px;
-                border-radius: 8px;
+                padding: 8px 16px;
+                border-radius: 6px;
                 font-weight: 500;
-                font-size: 13px;
+                font-size: 12px;
             }
             QPushButton#btn_primary {
                 background-color: #10B981;
@@ -97,19 +104,29 @@ class EventsDialog(QDialog):
                 border-radius: 8px;
                 gridline-color: #F3F4F6;
             }
+            QTableWidget::item {
+                padding: 4px 8px;
+            }
+            QTableWidget::item:selected {
+                background-color: #DBEAFE;
+                color: #1E40AF;
+            }
             QHeaderView::section {
                 background-color: #F9FAFB;
                 color: #374151;
                 font-weight: 600;
-                padding: 12px;
+                padding: 10px;
                 border: none;
                 border-bottom: 2px solid #E5E7EB;
             }
             QLineEdit, QDateEdit, QDoubleSpinBox {
-                padding: 8px 12px;
+                padding: 4px 8px;
+                min-height: 28px;
+                max-height: 32px;
                 border: 1px solid #D1D5DB;
-                border-radius: 6px;
+                border-radius: 4px;
                 background-color: white;
+                font-size: 12px;
             }
             QLineEdit:focus, QDateEdit:focus, QDoubleSpinBox:focus {
                 border-color: #10B981;
@@ -161,32 +178,26 @@ class EventsDialog(QDialog):
         form_frame.setStyleSheet("""
             QFrame {
                 background-color: white;
-                border: 1px solid #E5E7EB;
-                border-radius: 12px;
-                padding: 16px;
+                border: none;
+                border-radius: 8px;
+                padding: 8px;
             }
         """)
         
         form_layout = QHBoxLayout(form_frame)
-        form_layout.setSpacing(12)
+        form_layout.setSpacing(10)
+        form_layout.setContentsMargins(12, 8, 12, 8)
         
         # Data
         date_layout = QVBoxLayout()
-        date_layout.setSpacing(4)
+        date_layout.setSpacing(2)
         date_label = QLabel("Data")
-        date_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 12px;")
+        date_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 11px;")
         self.date_input = QDateEdit()
         self.date_input.setCalendarPopup(True)
         self.date_input.setDate(QDate(self.start_date.year, self.start_date.month, self.start_date.day))
         self.date_input.setDisplayFormat("dd/MM/yyyy")
-        self.date_input.setMinimumWidth(130)
-        self.date_input.setFixedWidth(140)
-        self.date_input.setStyleSheet("""
-            QDateEdit {
-                padding: 8px 12px;
-                font-size: 13px;
-            }
-        """)
+        self.date_input.setFixedWidth(120)
         self.date_input.dateChanged.connect(self._on_date_changed)
         date_layout.addWidget(date_label)
         date_layout.addWidget(self.date_input)
@@ -194,20 +205,22 @@ class EventsDialog(QDialog):
         
         # Mês da Simulação (read-only)
         month_layout = QVBoxLayout()
-        month_layout.setSpacing(4)
-        month_label = QLabel("Mês Simulação")
-        month_label.setStyleSheet("font-weight: 500; color: #6B7280; font-size: 12px;")
+        month_layout.setSpacing(2)
+        month_label = QLabel("Mês Sim.")
+        month_label.setStyleSheet("font-weight: 500; color: #6B7280; font-size: 11px;")
         self.month_display = QLabel("Mês 0")
         self.month_display.setStyleSheet("""
             background-color: #F3F4F6;
             border: 1px solid #E5E7EB;
-            border-radius: 6px;
-            padding: 8px 12px;
-            font-size: 13px;
+            border-radius: 4px;
+            padding: 4px 8px;
+            min-height: 28px;
+            max-height: 32px;
+            font-size: 12px;
             font-weight: 600;
             color: #3B82F6;
         """)
-        self.month_display.setMinimumWidth(110)
+        self.month_display.setFixedWidth(90)
         self.month_display.setAlignment(Qt.AlignCenter)
         month_layout.addWidget(month_label)
         month_layout.addWidget(self.month_display)
@@ -215,50 +228,50 @@ class EventsDialog(QDialog):
         
         # Descrição
         desc_layout = QVBoxLayout()
-        desc_layout.setSpacing(4)
-        desc_label = QLabel("Evento (máx 35 chars)")
-        desc_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 12px;")
+        desc_layout.setSpacing(2)
+        desc_label = QLabel("Evento (máx 35)")
+        desc_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 11px;")
         self.desc_input = QLineEdit()
         self.desc_input.setPlaceholderText("Ex: 13º Salário")
         self.desc_input.setMaxLength(35)
-        self.desc_input.setMinimumWidth(180)
+        self.desc_input.setMinimumWidth(160)
         desc_layout.addWidget(desc_label)
         desc_layout.addWidget(self.desc_input)
-        form_layout.addLayout(desc_layout)
+        form_layout.addLayout(desc_layout, stretch=1)
         
         # Aporte Extra
         deposit_layout = QVBoxLayout()
-        deposit_layout.setSpacing(4)
-        deposit_label = QLabel("Aporte Extra (R$)")
-        deposit_label.setStyleSheet("font-weight: 500; color: #10B981; font-size: 12px;")
+        deposit_layout.setSpacing(2)
+        deposit_label = QLabel("Aporte (R$)")
+        deposit_label.setStyleSheet("font-weight: 500; color: #10B981; font-size: 11px;")
         self.deposit_input = QDoubleSpinBox()
         self.deposit_input.setRange(0, 999999999)
         self.deposit_input.setDecimals(2)
         self.deposit_input.setPrefix("R$ ")
         self.deposit_input.setGroupSeparatorShown(True)
-        self.deposit_input.setMinimumWidth(140)
+        self.deposit_input.setFixedWidth(130)
         deposit_layout.addWidget(deposit_label)
         deposit_layout.addWidget(self.deposit_input)
         form_layout.addLayout(deposit_layout)
         
         # Resgate
         withdrawal_layout = QVBoxLayout()
-        withdrawal_layout.setSpacing(4)
+        withdrawal_layout.setSpacing(2)
         withdrawal_label = QLabel("Resgate (R$)")
-        withdrawal_label.setStyleSheet("font-weight: 500; color: #EF4444; font-size: 12px;")
+        withdrawal_label.setStyleSheet("font-weight: 500; color: #EF4444; font-size: 11px;")
         self.withdrawal_input = QDoubleSpinBox()
         self.withdrawal_input.setRange(0, 999999999)
         self.withdrawal_input.setDecimals(2)
         self.withdrawal_input.setPrefix("R$ ")
         self.withdrawal_input.setGroupSeparatorShown(True)
-        self.withdrawal_input.setMinimumWidth(140)
+        self.withdrawal_input.setFixedWidth(130)
         withdrawal_layout.addWidget(withdrawal_label)
         withdrawal_layout.addWidget(self.withdrawal_input)
         form_layout.addLayout(withdrawal_layout)
         
         # Botão Adicionar
         add_layout = QVBoxLayout()
-        add_layout.setSpacing(4)
+        add_layout.setSpacing(2)
         add_layout.addWidget(QLabel(""))  # Espaçador
         btn_add = QPushButton("➕ Adicionar")
         btn_add.setObjectName("btn_primary")
@@ -320,7 +333,7 @@ class EventsDialog(QDialog):
         return (event_date.year - self.start_date.year) * 12 + (event_date.month - self.start_date.month)
     
     def _create_events_table(self, parent_layout: QVBoxLayout):
-        """Cria a tabela de eventos (sem coluna Ações - usar clique direito)."""
+        """Cria a tabela de eventos com edição habilitada."""
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels([
@@ -336,14 +349,17 @@ class EventsDialog(QDialog):
         header.setSectionResizeMode(4, QHeaderView.Fixed)
         
         # Larguras otimizadas
-        self.table.setColumnWidth(0, 110)   # Data - aumentada
-        self.table.setColumnWidth(1, 100)   # Mês Sim. - aumentada
-        self.table.setColumnWidth(3, 130)   # Aporte Extra
-        self.table.setColumnWidth(4, 130)   # Resgate
+        self.table.setColumnWidth(0, 100)   # Data
+        self.table.setColumnWidth(1, 80)    # Mês Sim.
+        self.table.setColumnWidth(3, 120)   # Aporte Extra
+        self.table.setColumnWidth(4, 120)   # Resgate
         
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        
+        # Política de tamanho expansível
+        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Habilitar menu de contexto para deletar
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -352,12 +368,132 @@ class EventsDialog(QDialog):
         # Permitir deletar com tecla Delete
         self.table.keyPressEvent = self._table_key_press
         
+        # Conectar sinal de edição
+        self._editing_blocked = False  # Flag para evitar recursão
+        self.table.itemChanged.connect(self._on_item_changed)
+        
         parent_layout.addWidget(self.table, stretch=1)
         
         # Dica
-        hint_label = QLabel("💡 Clique direito ou tecla Del para remover evento")
-        hint_label.setStyleSheet("font-size: 11px; color: #9CA3AF; font-style: italic; padding: 4px;")
+        hint_label = QLabel("💡 Duplo clique para editar | Clique direito ou Del para remover")
+        hint_label.setStyleSheet("font-size: 10px; color: #9CA3AF; font-style: italic; padding: 2px;")
         parent_layout.addWidget(hint_label)
+    
+    def _on_item_changed(self, item: QTableWidgetItem):
+        """
+        Handler para edição de células.
+        Sincroniza alterações com o backend (self.events_manager).
+        """
+        if self._editing_blocked:
+            return
+        
+        row = item.row()
+        col = item.column()
+        
+        # Coluna 1 (Mês Sim.) é calculada automaticamente - não editar diretamente
+        if col == 1:
+            return
+        
+        # Obter eventos do manager
+        events = self.events_manager.events
+        if row >= len(events):
+            return
+        
+        event = events[row]
+        new_text = item.text().strip()
+        
+        try:
+            self._editing_blocked = True
+            
+            if col == 0:  # Data
+                # Tentar parsear a data
+                try:
+                    # Aceitar formatos: dd/mm/yyyy ou dd-mm-yyyy
+                    parsed_date = None
+                    for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d']:
+                        try:
+                            parsed_date = datetime.strptime(new_text, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if parsed_date is None:
+                        raise ValueError("Formato de data inválido")
+                    
+                    # Validar se está no período da simulação
+                    months_diff = self._calculate_month_diff(parsed_date)
+                    if months_diff < 0 or months_diff >= self.simulation_months:
+                        QMessageBox.warning(self, "Data Inválida", 
+                            "A data deve estar dentro do período da simulação.")
+                        item.setText(event.date.strftime('%d/%m/%Y'))
+                        return
+                    
+                    # Atualizar evento
+                    event.date = parsed_date
+                    
+                    # Recalcular e atualizar célula de Mês Sim.
+                    year = months_diff // 12
+                    month = months_diff % 12
+                    month_item = self.table.item(row, 1)
+                    if month_item:
+                        month_item.setText(f"A{year}M{month}")
+                        month_item.setForeground(QColor('#3B82F6'))
+                        month_item.setBackground(QColor('#EFF6FF'))
+                    
+                except ValueError as e:
+                    QMessageBox.warning(self, "Erro", f"Data inválida: {new_text}")
+                    item.setText(event.date.strftime('%d/%m/%Y'))
+                    
+            elif col == 2:  # Evento/Descrição
+                if len(new_text) > 35:
+                    new_text = new_text[:35]
+                    item.setText(new_text)
+                event.description = new_text
+                
+            elif col == 3:  # Aporte Extra
+                try:
+                    # Remover R$ e espaços, converter para float
+                    value_str = new_text.replace('R$', '').replace('.', '').replace(',', '.').strip()
+                    if value_str == '—' or value_str == '':
+                        value_str = '0'
+                    new_value = float(value_str)
+                    event.deposit = max(0, new_value)
+                    if event.deposit > 0:
+                        item.setText(format_currency(event.deposit))
+                        item.setForeground(QColor('#059669'))
+                    else:
+                        item.setText("—")
+                        item.setForeground(QColor('#9CA3AF'))
+                except ValueError:
+                    if event.deposit > 0:
+                        item.setText(format_currency(event.deposit))
+                    else:
+                        item.setText("—")
+                    
+            elif col == 4:  # Resgate
+                try:
+                    value_str = new_text.replace('R$', '').replace('.', '').replace(',', '.').strip()
+                    if value_str == '—' or value_str == '':
+                        value_str = '0'
+                    new_value = float(value_str)
+                    event.withdrawal = max(0, new_value)
+                    if event.withdrawal > 0:
+                        item.setText(format_currency(event.withdrawal))
+                        item.setForeground(QColor('#DC2626'))
+                    else:
+                        item.setText("—")
+                        item.setForeground(QColor('#9CA3AF'))
+                except ValueError:
+                    if event.withdrawal > 0:
+                        item.setText(format_currency(event.withdrawal))
+                    else:
+                        item.setText("—")
+            
+            # Atualizar resumo
+            self._update_summary()
+            
+        finally:
+            self._editing_blocked = False
     
     def _show_context_menu(self, position):
         """Mostra menu de contexto para deletar evento."""
@@ -527,21 +663,23 @@ class EventsDialog(QDialog):
         self._load_events()
     
     def _load_events(self):
-        """Carrega eventos na tabela."""
+        """Carrega eventos na tabela com edição habilitada."""
+        self._editing_blocked = True  # Bloquear sinal durante carregamento
+        
         self.table.setRowCount(len(self.events_manager.events))
         
         for row, event in enumerate(self.events_manager.events):
             months_diff = self._calculate_month_diff(event.date)
             is_valid = 0 <= months_diff < self.simulation_months
             
-            # Data
+            # Data (editável)
             date_item = QTableWidgetItem(event.date.strftime('%d/%m/%Y'))
             date_item.setTextAlignment(Qt.AlignCenter)
             if not is_valid:
                 date_item.setForeground(QColor('#DC2626'))
             self.table.setItem(row, 0, date_item)
             
-            # Mês da Simulação
+            # Mês da Simulação (NÃO editável - calculado)
             if is_valid:
                 year = months_diff // 12
                 month = months_diff % 12
@@ -551,17 +689,20 @@ class EventsDialog(QDialog):
             
             month_item = QTableWidgetItem(month_text)
             month_item.setTextAlignment(Qt.AlignCenter)
+            month_item.setFlags(month_item.flags() & ~Qt.ItemIsEditable)  # Não editável
             if not is_valid:
                 month_item.setForeground(QColor('#DC2626'))
+                month_item.setBackground(QColor('#FEE2E2'))
             else:
                 month_item.setForeground(QColor('#3B82F6'))
+                month_item.setBackground(QColor('#EFF6FF'))
             self.table.setItem(row, 1, month_item)
             
-            # Descrição
+            # Descrição (editável)
             desc_item = QTableWidgetItem(event.description)
             self.table.setItem(row, 2, desc_item)
             
-            # Aporte
+            # Aporte (editável)
             deposit_item = QTableWidgetItem(
                 format_currency(event.deposit) if event.deposit > 0 else "—"
             )
@@ -570,7 +711,7 @@ class EventsDialog(QDialog):
                 deposit_item.setForeground(QColor('#059669'))
             self.table.setItem(row, 3, deposit_item)
             
-            # Resgate
+            # Resgate (editável)
             withdrawal_item = QTableWidgetItem(
                 format_currency(event.withdrawal) if event.withdrawal > 0 else "—"
             )
@@ -579,6 +720,7 @@ class EventsDialog(QDialog):
                 withdrawal_item.setForeground(QColor('#DC2626'))
             self.table.setItem(row, 4, withdrawal_item)
         
+        self._editing_blocked = False  # Reabilitar sinal
         self._update_summary()
     
     def _update_summary(self):

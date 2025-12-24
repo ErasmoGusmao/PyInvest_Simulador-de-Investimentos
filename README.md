@@ -8,6 +8,75 @@ Uma aplicação desktop moderna para simulação de investimentos com juros comp
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Monte Carlo](https://img.shields.io/badge/Monte_Carlo-50000_cenários-orange.svg)
 
+## ✨ Novidades v4.6 (Redimensionamento Manual + Controle Total)
+
+### 🖱️ Redimensionamento Manual das Colunas
+- **Ambas as tabelas** ("Projeção Anual" e "Cenários Reproduzíveis") agora permitem redimensionamento manual com o mouse
+- Modo `QHeaderView.Interactive` habilitado globalmente
+- Largura mínima de **100px** para proteção contra compressão de valores monetários
+
+### 🎯 Ajuste Inicial Automático
+- `resizeColumnsToContents()` executado ao carregar dados
+- Corrige problema de corte em títulos como "PERCENTIL"
+- Larguras mínimas garantidas após o ajuste automático
+
+### 📊 Comportamento por Quantidade de Colunas
+| Colunas | Scroll Horizontal | Stretch Last | Comportamento |
+|---------|-------------------|--------------|---------------|
+| 5 | Desabilitado | Sim | Preenche tela |
+| 10 | Habilitado | Sim | Preenche + manual |
+| 12 | Obrigatório | Não | Scroll + manual |
+
+---
+
+## ✨ Novidades v4.5 (Tabela Responsiva + Alinhamento Centralizado)
+
+### 📊 Lógica Híbrida de Colunas (10 vs 12)
+- **10 colunas (sem eventos)**: Modo `Stretch` - tabela preenche 100% da largura disponível
+- **12 colunas (com eventos)**: Modo `Interactive` + scroll horizontal
+  - `resizeColumnsToContents()` para ajuste automático
+  - Largura mínima de 100px para evitar compressão de valores monetários
+  - Barra de scroll horizontal habilitada (`ScrollBarAsNeeded`)
+
+### 🎯 Alinhamento Centralizado Total
+- **Cabeçalhos**: `horizontalHeader().setDefaultAlignment(Qt.AlignCenter)`
+- **Células**: Todos os `QTableWidgetItem` com `setTextAlignment(Qt.AlignCenter)`
+- Melhor legibilidade e aparência visual consistente
+
+### 🗑️ Limpeza de Código
+- Removido método `reset_columns()` não utilizado
+
+---
+
+## ✨ Novidades v4.4 (Tabela de Projeção Expandida)
+
+### 📊 Novas Colunas na Tabela de Projeção Anual
+A tabela de projeção agora exibe estatísticas mais completas:
+
+| Coluna | Descrição | Cor |
+|--------|-----------|-----|
+| Ano | Período da simulação | Verde (primary) |
+| Total Investido | Capital + Aportes acumulados | — |
+| Saldo (Det.) | Valor determinístico (sem variação) | Verde (destaque) |
+| Média | Média das simulações Monte Carlo | Vermelho |
+| Mediana | Valor central (P50) | Roxo |
+| Moda | Valor mais frequente | Laranja |
+| Mín | Pior cenário absoluto | Cinza |
+| P5 | Percentil 5 (pessimista) | Vermelho escuro |
+| P90 | Percentil 90 (otimista) | Verde |
+| Máx | Melhor cenário absoluto | Azul |
+
+---
+
+## ✨ Novidades v4.3 (Correção Formatação pt-BR)
+
+### 🔧 Correção: Duplo Clique em Cenários Reproduzíveis
+- **Problema corrigido**: Ao clicar em um cenário para carregar os parâmetros, os valores agora são formatados corretamente no padrão **pt-BR**
+- **Antes**: Valores eram inseridos com `.` como decimal (formato EN-US), causando leitura incorreta
+- **Agora**: Valores formatados com `.` como milhar e `,` como decimal (1.400.000,00)
+
+---
+
 ## ✨ Novidades v4.2 (Cenários Reproduzíveis Reais + IC 90%)
 
 ### 🎯 Correção Importante: Cenários Representativos
