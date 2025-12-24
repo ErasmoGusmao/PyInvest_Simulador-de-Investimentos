@@ -1442,7 +1442,8 @@ class SensitivityDashboard(QWidget):
         initial_amount: float,
         monthly_contribution: float,
         annual_rate: float,
-        years: int
+        years: int,
+        final_balance: float = None
     ):
         """
         Atualiza os valores dos cards com base nos parâmetros.
@@ -1452,6 +1453,7 @@ class SensitivityDashboard(QWidget):
             monthly_contribution: Aporte mensal (R$)
             annual_rate: Taxa anual (%)
             years: Período em anos
+            final_balance: Saldo final opcional (para usar com P50 no Modo Expert)
         """
         from core.calculation import InvestmentCalculator
         
@@ -1481,6 +1483,22 @@ class SensitivityDashboard(QWidget):
         sensib_1pct = metrics.sensibilidade_taxa / 100
         sensib_fmt = f"R$ {sensib_1pct:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.card_taxa.set_value(sensib_fmt)
+    
+    def update_from_result(self, result):
+        """
+        Atualiza os cards a partir de um MonteCarloResult.
+        
+        Args:
+            result: MonteCarloResult com params_used
+        """
+        if hasattr(result, 'params_used'):
+            params = result.params_used
+            self.update_sensitivities(
+                initial_amount=params.get('capital_inicial', 0),
+                monthly_contribution=params.get('aporte_mensal', 0),
+                annual_rate=params.get('rentabilidade_anual', 0),
+                years=params.get('periodo_anos', 10)
+            )
     
     def reset(self):
         """Reseta todos os cards para o estado inicial."""

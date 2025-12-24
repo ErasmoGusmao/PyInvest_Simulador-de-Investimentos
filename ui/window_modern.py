@@ -158,17 +158,30 @@ class RangeInput(QFrame):
         """Retorna valor máximo."""
         return self.input_max.text()
     
+    def _format_value_ptbr(self, value) -> str:
+        """Formata um valor numérico para o padrão pt-BR."""
+        if value is None:
+            return ""
+        try:
+            num = float(value)
+            # Formata com separador de milhar e decimal pt-BR
+            # Ex: 1400000.0 → "1.400.000,00"
+            formatted = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return formatted
+        except (ValueError, TypeError):
+            return str(value) if value else ""
+    
     def set_min_value(self, value):
-        """Define valor mínimo."""
-        self.input_min.setText(str(value) if value else "")
+        """Define valor mínimo (formatado pt-BR)."""
+        self.input_min.setText(self._format_value_ptbr(value))
     
     def set_base_value(self, value):
-        """Define valor base/determinístico."""
-        self.input_det.setText(str(value) if value else "")
+        """Define valor base/determinístico (formatado pt-BR)."""
+        self.input_det.setText(self._format_value_ptbr(value))
     
     def set_max_value(self, value):
-        """Define valor máximo."""
-        self.input_max.setText(str(value) if value else "")
+        """Define valor máximo (formatado pt-BR)."""
+        self.input_max.setText(self._format_value_ptbr(value))
     
     def clear(self):
         """Limpa todos os campos."""

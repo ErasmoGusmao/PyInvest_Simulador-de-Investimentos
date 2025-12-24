@@ -155,8 +155,9 @@ class RiskMetricsPanel(QWidget):
 class PercentileStatsPanel(QWidget):
     """Painel com estatísticas de percentis."""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_title: bool = True):
         super().__init__(parent)
+        self._show_title = show_title
         self._setup_ui()
     
     def _setup_ui(self):
@@ -164,27 +165,30 @@ class PercentileStatsPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         
-        # Título
-        title = QLabel("📈 Estatísticas dos Saldos Finais")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #1F2937;")
-        layout.addWidget(title)
+        # Título (opcional)
+        if self._show_title:
+            title = QLabel("📈 Estatísticas dos Saldos Finais")
+            title.setStyleSheet("font-size: 16px; font-weight: bold; color: #1F2937;")
+            layout.addWidget(title)
         
         # Frame com estatísticas
         stats_frame = QFrame()
         stats_frame.setStyleSheet("""
             QFrame {
-                background-color: white;
+                background-color: #FAFAFA;
                 border: 1px solid #E5E7EB;
-                border-radius: 12px;
-                padding: 16px;
+                border-radius: 8px;
+                padding: 12px;
             }
         """)
         
         stats_layout = QVBoxLayout(stats_frame)
+        stats_layout.setContentsMargins(8, 8, 8, 8)
         
         self.stats_label = QLabel("Execute uma simulação para ver estatísticas")
-        self.stats_label.setStyleSheet("font-size: 13px; color: #374151;")
+        self.stats_label.setStyleSheet("font-size: 13px; color: #374151; background: transparent;")
         self.stats_label.setTextFormat(Qt.RichText)
+        self.stats_label.setWordWrap(True)
         stats_layout.addWidget(self.stats_label)
         
         layout.addWidget(stats_frame)
@@ -365,7 +369,8 @@ class DistributionChart(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self.chart_view = QWebEngineView()
-        self.chart_view.setMinimumHeight(400)
+        self.chart_view.setMinimumHeight(350)
+        self.chart_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.chart_view)
         
         self._show_empty()
@@ -374,7 +379,7 @@ class DistributionChart(QWidget):
         """Mostra estado vazio."""
         html = """
         <div style="display:flex;justify-content:center;align-items:center;height:100%;
-                    color:#9CA3AF;font-family:sans-serif;">
+                    color:#9CA3AF;font-family:sans-serif;font-size:14px;">
             Execute uma simulação Monte Carlo para ver a distribuição
         </div>
         """
@@ -387,8 +392,12 @@ class DistributionChart(QWidget):
         meta: float,
         deterministic: Optional[float] = None
     ):
-        """Atualiza histograma."""
+        """Atualiza histograma com autosize responsivo."""
         import numpy as np
+        
+        if not final_balances:
+            self._show_empty()
+            return
         
         # Calcular histograma
         hist, bins = np.histogram(final_balances, bins=30)
@@ -398,17 +407,57 @@ class DistributionChart(QWidget):
         bin_centers_m = [b / 1_000_000 for b in bin_centers]
         meta_m = meta / 1_000_000
         p50_m = stats.p50 / 1_000_000
+        p5_m = stats.p5 / 1_000_000
         det_m = deterministic / 1_000_000 if deterministic else None
+        
+        # Construir shapes
+        shapes_list = [
+            f"""{{ type: 'line', x0: {meta_m}, x1: {meta_m}, y0: 0, y1: 1, yref: 'paper',
+                line: {{ color: '#F59E0B', width: 3 }} }}""",
+            f"""{{ type: 'line', x0: {p50_m}, x1: {p50_m}, y0: 0, y1: 1, yref: 'paper',
+                line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}""",
+            f"""{{ type: 'line', x0: {p5_m}, x1: {p5_m}, y0: 0, y1: 1, yref: 'paper',
+                line: {{ color: '#DC2626', width: 2, dash: 'dot' }} }}"""
+        ]
+        
+        if det_m:
+            shapes_list.append(
+                f"""{{ type: 'line', x0: {det_m}, x1: {det_m}, y0: 0, y1: 1, yref: 'paper',
+                    line: {{ color: '#10B981', width: 2 }} }}"""
+            )
+        
+        shapes = ','.join(shapes_list)
+        
+        # Construir annotations
+        annot_list = [
+            f"""{{ x: {meta_m}, y: 1, yref: 'paper', text: 'Meta', showarrow: false,
+                font: {{ color: '#F59E0B', size: 11 }}, yanchor: 'bottom' }}""",
+            f"""{{ x: {p50_m}, y: 0.92, yref: 'paper', text: 'Mediana', showarrow: false,
+                font: {{ color: '#EF4444', size: 11 }}, yanchor: 'bottom' }}""",
+            f"""{{ x: {p5_m}, y: 0.84, yref: 'paper', text: 'P5', showarrow: false,
+                font: {{ color: '#DC2626', size: 11 }}, yanchor: 'bottom' }}"""
+        ]
+        
+        if det_m:
+            annot_list.append(
+                f"""{{ x: {det_m}, y: 0.76, yref: 'paper', text: 'Det.', showarrow: false,
+                    font: {{ color: '#10B981', size: 11 }}, yanchor: 'bottom' }}"""
+            )
+        
+        annotations = ','.join(annot_list)
         
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-            <style>body {{ margin: 0; font-family: sans-serif; }}</style>
+            <style>
+                body {{ margin: 0; padding: 0; }}
+                #chart {{ width: 100%; height: 100%; min-height: 350px; }}
+            </style>
         </head>
         <body>
-            <div id="chart" style="width:100%;height:400px;"></div>
+            <div id="chart"></div>
             <script>
                 var data = [{{
                     x: {bin_centers_m},
@@ -422,57 +471,19 @@ class DistributionChart(QWidget):
                 }}];
                 
                 var layout = {{
-                    title: 'Distribuição dos Saldos Finais',
-                    xaxis: {{ title: 'Saldo Final (R$ Milhões)' }},
-                    yaxis: {{ title: 'Frequência (nº cenários)' }},
-                    shapes: [
-                        // Meta
-                        {{
-                            type: 'line',
-                            x0: {meta_m}, x1: {meta_m},
-                            y0: 0, y1: 1, yref: 'paper',
-                            line: {{ color: '#F59E0B', width: 3 }}
-                        }},
-                        // Mediana
-                        {{
-                            type: 'line',
-                            x0: {p50_m}, x1: {p50_m},
-                            y0: 0, y1: 1, yref: 'paper',
-                            line: {{ color: '#EF4444', width: 2, dash: 'dash' }}
-                        }}
-                        {"," + f'''{{
-                            type: 'line',
-                            x0: {det_m}, x1: {det_m},
-                            y0: 0, y1: 1, yref: 'paper',
-                            line: {{ color: '#10B981', width: 2 }}
-                        }}''' if det_m else ""}
-                    ],
-                    annotations: [
-                        {{
-                            x: {meta_m}, y: 1, yref: 'paper',
-                            text: 'Meta', showarrow: false,
-                            font: {{ color: '#F59E0B' }},
-                            yanchor: 'bottom'
-                        }},
-                        {{
-                            x: {p50_m}, y: 0.9, yref: 'paper',
-                            text: 'Mediana (P50)', showarrow: false,
-                            font: {{ color: '#EF4444' }},
-                            yanchor: 'bottom'
-                        }}
-                        {"," + f'''{{
-                            x: {det_m}, y: 0.8, yref: 'paper',
-                            text: 'Determinístico', showarrow: false,
-                            font: {{ color: '#10B981' }},
-                            yanchor: 'bottom'
-                        }}''' if det_m else ""}
-                    ],
+                    title: {{ text: 'Distribuição dos Saldos Finais', font: {{ size: 14 }} }},
+                    xaxis: {{ title: 'Saldo Final (R$ Milhões)', gridcolor: '#E5E7EB' }},
+                    yaxis: {{ title: 'Frequência', gridcolor: '#E5E7EB' }},
+                    shapes: [{shapes}],
+                    annotations: [{annotations}],
                     margin: {{ l: 60, r: 30, t: 50, b: 50 }},
                     paper_bgcolor: 'white',
-                    plot_bgcolor: 'white'
+                    plot_bgcolor: 'white',
+                    autosize: true
                 }};
                 
-                Plotly.newPlot('chart', data, layout, {{responsive: true}});
+                Plotly.newPlot('chart', data, layout, {{ responsive: true, displayModeBar: false }});
+                window.addEventListener('resize', function() {{ Plotly.Plots.resize('chart'); }});
             </script>
         </body>
         </html>
