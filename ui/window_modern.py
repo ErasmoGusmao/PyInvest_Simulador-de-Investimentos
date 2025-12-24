@@ -1900,10 +1900,8 @@ class ModernMainWindow(QMainWindow):
         """
         Atualiza estatísticas avançadas após simulação.
         
-        Calcula:
-        - Percentis (P5, P25, P50, P75, P95)
-        - Métricas de risco (VaR, Sharpe, etc.)
-        - Cenários representativos com parâmetros REAIS
+        Usa os dados calculados no MonteCarloEngine para garantir consistência
+        entre tabelas de estatísticas e cenários reproduzíveis.
         """
         if not hasattr(result, 'yearly_projection') or not result.yearly_projection:
             return
@@ -1918,44 +1916,36 @@ class ModernMainWindow(QMainWindow):
             periodo = int(self._parse_value(self.input_periodo.text()) or 10)
             
             # =====================================================================
-            # 1. CALCULAR PERCENTIS REAIS
+            # 1. USAR PERCENTILE_STATS CALCULADO NO ENGINE (fonte única de verdade)
             # =====================================================================
             
-            # Gerar distribuição simulada baseada em min/mean/max
-            # (aproximação quando não temos os dados brutos das simulações)
-            std_approx = (final_year.balance_max - final_year.balance_min) / 4
-            
-            # Criar distribuição mais realista usando os dados disponíveis
-            n_samples = 5000
-            simulated_balances = np.concatenate([
-                np.random.normal(final_year.balance_mean, std_approx, n_samples),
-            ])
-            
-            # Limitar aos bounds conhecidos
-            simulated_balances = np.clip(
-                simulated_balances, 
-                final_year.balance_min, 
-                final_year.balance_max
-            )
-            
-            # Calcular percentis reais
-            self.percentile_stats = PercentileStats(
-                p5=float(np.percentile(simulated_balances, 5)),
-                p10=float(np.percentile(simulated_balances, 10)),
-                p25=float(np.percentile(simulated_balances, 25)),
-                p50=float(np.percentile(simulated_balances, 50)),
-                p75=float(np.percentile(simulated_balances, 75)),
-                p90=float(np.percentile(simulated_balances, 90)),
-                p95=float(np.percentile(simulated_balances, 95)),
-                mean=float(np.mean(simulated_balances)),
-                mode=float(np.median(simulated_balances)),  # Aproximação
-                std_dev=float(np.std(simulated_balances)),
-                variance=float(np.var(simulated_balances)),
-                min_value=float(np.min(simulated_balances)),
-                max_value=float(np.max(simulated_balances)),
-                coef_variation=float(np.std(simulated_balances) / np.mean(simulated_balances) * 100) 
-                    if np.mean(simulated_balances) > 0 else 0
-            )
+            if result.has_monte_carlo and result.percentile_stats is not None:
+                # Usar estatísticas já calculadas no MonteCarloEngine
+                self.percentile_stats = result.percentile_stats
+                
+                # Usar saldos finais reais para métricas de risco
+                simulated_balances = result.sampled_final_balances
+            else:
+                # Fallback para modo determinístico: criar PercentileStats simples
+                final_balance = final_year.balance_deterministic
+                self.percentile_stats = PercentileStats(
+                    p5=final_balance,
+                    p10=final_balance,
+                    p25=final_balance,
+                    p50=final_balance,
+                    p75=final_balance,
+                    p90=final_balance,
+                    p95=final_balance,
+                    mean=final_balance,
+                    mode=final_balance,
+                    std_dev=0.0,
+                    variance=0.0,
+                    min_value=final_balance,
+                    max_value=final_balance,
+                    coef_variation=0.0
+                )
+                # Array com único valor para cálculos de risco
+                simulated_balances = np.array([final_balance])
             
             # Atualizar painel de estatísticas
             self.percentile_stats_panel.update_stats(
@@ -1964,21 +1954,20 @@ class ModernMainWindow(QMainWindow):
             )
             
             # =====================================================================
-            # 2. MÉTRICAS DE RISCO (VaR correto)
+            # 2. MÉTRICAS DE RISCO (usando dados reais)
             # =====================================================================
             
             # VaR 95% = Média - P5 (perda máxima esperada com 95% confiança)
             var_95 = self.percentile_stats.mean - self.percentile_stats.p5
             
             # Probabilidade de sucesso (atingir meta)
-            prob_success = (np.sum(simulated_balances >= meta) / len(simulated_balances)) * 100
+            prob_success = (np.sum(simulated_balances >= meta) / len(simulated_balances)) * 100 if len(simulated_balances) > 0 else 0
             
             # Probabilidade de ruína (saldo <= capital inicial)
-            prob_ruin = (np.sum(simulated_balances <= capital) / len(simulated_balances)) * 100
+            prob_ruin = (np.sum(simulated_balances <= capital) / len(simulated_balances)) * 100 if len(simulated_balances) > 0 else 0
             
             # CVaR (Expected Shortfall)
-            worst_5_pct = np.percentile(simulated_balances, 5)
-            worst_cases = simulated_balances[simulated_balances <= worst_5_pct]
+            worst_cases = simulated_balances[simulated_balances <= self.percentile_stats.p5]
             cvar = self.percentile_stats.mean - np.mean(worst_cases) if len(worst_cases) > 0 else var_95
             
             # Razão Risco/Retorno
@@ -2008,7 +1997,7 @@ class ModernMainWindow(QMainWindow):
             # =====================================================================
             
             # Usar cenários representativos diretamente do resultado Monte Carlo
-            # (em vez de calcular parâmetros implícitos via busca binária)
+            # (garantia de consistência: usam os mesmos percentis)
             if result.has_monte_carlo and result.representative_scenarios:
                 self._populate_cenarios_table(result.representative_scenarios)
             else:

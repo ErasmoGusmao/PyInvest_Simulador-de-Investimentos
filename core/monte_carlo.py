@@ -5,9 +5,13 @@ Implementa análise probabilística vetorizada com NumPy.
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
 from enum import Enum
 from datetime import date
+
+# Import para PercentileStats (evita circular import)
+if TYPE_CHECKING:
+    from .statistics import PercentileStats
 
 
 class DistributionType(Enum):
@@ -265,6 +269,9 @@ class MonteCarloResult:
     # Cenários representativos (parâmetros REAIS de cada percentil)
     representative_scenarios: List[RepresentativeScenario] = field(default_factory=list)
     
+    # Estatísticas de percentis calculadas UMA VEZ (fonte única de verdade)
+    percentile_stats: Optional['PercentileStats'] = None
+    
     # Parâmetros amostrados (para análise posterior, se necessário)
     sampled_capitals: Optional[np.ndarray] = None
     sampled_monthlies: Optional[np.ndarray] = None
@@ -430,15 +437,23 @@ class MonteCarloEngine:
             final_balance_min = balances_min[-1]
             final_balance_max = balances_max[-1]
             
-            # Extrair cenários representativos (parâmetros REAIS de cada percentil)
+            # Calcular PercentileStats UMA VEZ (fonte única de verdade)
+            from .statistics import calculate_percentiles
+            percentile_stats = calculate_percentiles(sampled_final_balances)
+            
+            # Extrair cenários representativos usando OS MESMOS percentis calculados
             representative_scenarios = extract_representative_scenarios(
                 sampled_final_balances,
                 sampled_capitals,
                 sampled_monthlies,
-                sampled_rates
+                sampled_rates,
+                percentile_stats  # Passa os percentis já calculados
             )
+            # Armazenar para uso no resultado
+            calculated_percentile_stats = percentile_stats
         else:
             # Sem Monte Carlo - usar valores determinísticos
+            calculated_percentile_stats = None
             balances_mean = balances_det.copy()
             balances_median = balances_det.copy()
             balances_mode = balances_det.copy()
@@ -522,6 +537,8 @@ class MonteCarloEngine:
             insolvency_year=insolvency_month / 12 if insolvency_month else None,
             # Novos campos: cenários representativos com parâmetros REAIS
             representative_scenarios=representative_scenarios,
+            # Estatísticas calculadas uma única vez (fonte de verdade)
+            percentile_stats=calculated_percentile_stats,
             sampled_capitals=sampled_capitals,
             sampled_monthlies=sampled_monthlies,
             sampled_rates=sampled_rates,
@@ -634,7 +651,8 @@ def extract_representative_scenarios(
     final_balances: np.ndarray,
     capitals: np.ndarray,
     monthlies: np.ndarray,
-    rates: np.ndarray
+    rates: np.ndarray,
+    percentile_stats: Optional['PercentileStats'] = None
 ) -> List[RepresentativeScenario]:
     """
     Extrai cenários representativos para cada percentil.
@@ -648,10 +666,32 @@ def extract_representative_scenarios(
         capitals: Array com capitais iniciais amostrados
         monthlies: Array com aportes mensais amostrados
         rates: Array com taxas anuais amostradas
+        percentile_stats: PercentileStats já calculado (evita recálculo)
         
     Returns:
         Lista de RepresentativeScenario para cada percentil
     """
+    # Usar percentis já calculados se disponíveis (consistência garantida)
+    if percentile_stats is not None:
+        percentile_values = {
+            5: percentile_stats.p5,
+            25: percentile_stats.p25,
+            50: percentile_stats.p50,
+            75: percentile_stats.p75,
+            95: percentile_stats.p95,
+        }
+        mean_balance = percentile_stats.mean
+    else:
+        # Fallback: calcular localmente (mantém compatibilidade)
+        percentile_values = {
+            5: float(np.percentile(final_balances, 5)),
+            25: float(np.percentile(final_balances, 25)),
+            50: float(np.percentile(final_balances, 50)),
+            75: float(np.percentile(final_balances, 75)),
+            95: float(np.percentile(final_balances, 95)),
+        }
+        mean_balance = float(np.mean(final_balances))
+    
     scenarios_config = [
         ("P5 (Pessimista)", "P5", 5, "Worst Case"),
         ("P25 (Conservador)", "P25", 25, "Conservador"),
@@ -663,8 +703,8 @@ def extract_representative_scenarios(
     results = []
     
     for name, percentile_label, percentile_value, scenario_type in scenarios_config:
-        # Calcular o valor do percentil
-        target_balance = float(np.percentile(final_balances, percentile_value))
+        # Usar valor do percentil já calculado
+        target_balance = percentile_values[percentile_value]
         
         # Encontrar o índice da simulação mais próxima deste percentil
         idx = int(np.argmin(np.abs(final_balances - target_balance)))
@@ -681,7 +721,6 @@ def extract_representative_scenarios(
         ))
     
     # Adicionar cenário da Média (simulação mais próxima da média)
-    mean_balance = float(np.mean(final_balances))
     idx_mean = int(np.argmin(np.abs(final_balances - mean_balance)))
     
     results.append(RepresentativeScenario(
