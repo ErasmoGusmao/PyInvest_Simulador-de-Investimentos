@@ -1,5 +1,50 @@
 # 💰 PyInvest - Simulador de Investimentos
 
+---
+
+## 🚀 Novidades v4.7 (CDI B3 + Métricas de Risco Avançadas)
+
+### 🏦 CDI Oficial da B3 (via API do Banco Central)
+- O simulador agora obtém automaticamente a **taxa CDI** diretamente da B3 (fonte oficial), via API do Banco Central (Série 12).
+- Cálculo anualizado correto, com fallback manual e cache inteligente.
+- Card dedicado mostra a taxa utilizada, fonte e tooltip explicativo.
+
+### 📊 Grid 2x4 de Métricas de Risco
+- Cartões de risco expandidos: Prob. Sucesso, Prob. Ruína, VaR 95%, **CVaR 95%**, Volatilidade, Risco/Retorno, Sharpe Ratio, **CDI**.
+- Tooltips matemáticos detalhados em cada card, com fórmulas e explicações.
+- Layout responsivo, fontes otimizadas e integração total com o painel de resumo.
+
+### 🍷 Novas Métricas Estatísticas
+- **CVaR 95% (Expected Shortfall):** média das perdas nos 5% piores cenários.
+- **Volatilidade:** desvio padrão dos saldos finais.
+- **Sharpe Ratio:** retorno excedente ao CDI por unidade de risco.
+
+### 🛡️ Robustez e Integração
+- Correção de bugs no acesso ao dicionário do CDI.
+- Painel de resumo e histograma totalmente integrados às novas métricas.
+- Testes completos no ambiente virtual.
+
+---
+
+## 📈 Métricas de Risco (Monte Carlo)
+
+O painel de análise de risco exibe **8 cartões** com as principais métricas estatísticas, cada uma com tooltip explicativo e fórmula matemática:
+
+| Card         | Descrição | Fórmula/Tooltip |
+|--------------|-----------|-----------------|
+| ✅ Prob. Sucesso | Chance de atingir a meta | P(Sucesso) = (# Saldos ≥ Meta) ÷ Total × 100% |
+| ❌ Prob. Ruína   | Risco de perder capital  | P(Ruína) = (# Saldos < Capital) ÷ Total × 100% |
+| ⚠️ VaR 95%       | Perda máxima esperada em 5% dos piores cenários | VaR₉₅ = Média − P₅ |
+| 🍷 CVaR 95%      | Média das perdas nos 5% piores cenários | CVaR = E[X | X ≤ VaR] |
+| 📊 Volatilidade  | Dispersão dos saldos finais | σ = √[ Σ(Saldo − Média)² ÷ N ] |
+| ⚖️ Risco/Retorno | Quanto de risco por cada real de ganho | Razão = VaR₉₅ ÷ Ganho Esperado |
+| 📈 Sharpe Ratio  | Retorno excedente ao CDI por unidade de risco | Sharpe = (CAGR − CDI) ÷ Volatilidade |
+| 🏦 Taxa CDI      | Taxa livre de risco utilizada | Fonte: B3 (via API do Banco Central) |
+
+> **Fonte do CDI:** A taxa é obtida automaticamente da B3 (via API do Banco Central, Série 12), anualizada corretamente. Se não houver conexão, o usuário pode digitar manualmente.
+
+---
+
 Uma aplicação desktop moderna para simulação de investimentos com juros compostos e **análise probabilística Monte Carlo**, desenvolvida em Python com interface gráfica profissional e gráficos interativos Plotly.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -162,133 +207,8 @@ A tabela mostra os parâmetros **exatos** que geraram cada percentil na simulaç
 
 > **Nota**: Os valores de Capital e Aporte agora **variam** conforme o range definido!
 
-## 🗂️ Estrutura do Projeto
-
-```
-pyinvest/
-├── main.py                  # Ponto de entrada
-├── requirements.txt         # Dependências
-├── README.md               # Documentação
-│
-├── core/                    # Lógica de negócio
-│   ├── __init__.py
-│   ├── calculation.py       # Cálculos financeiros + sensibilidade
-│   ├── monte_carlo.py       # Motor Monte Carlo vetorizado
-│   └── worker.py            # QThread para execução assíncrona
-│
-└── ui/                      # Interface gráfica
-    ├── __init__.py
-    ├── window_mc.py         # Janela principal com Monte Carlo
-    ├── widgets.py           # Componentes (RangeInput, Charts, etc.)
-    └── styles.py            # Tema e estilos QSS
-```
-
-## 🚀 Instalação
-
-### Pré-requisitos
-- Python 3.10 ou superior
-- pip (gerenciador de pacotes)
-
-### Passo a Passo
-
-```bash
-# Clone o projeto
 git clone <seu-repositorio>
-cd pyinvest
 
-# Crie um ambiente virtual
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# ou: venv\Scripts\activate  # Windows
-
-# Instale as dependências
-pip install -r requirements.txt
-```
-
-## ▶️ Executando
-
-```bash
-python main.py
-```
-
-## 🎨 Interface
-
-### Painel de Parâmetros (com Range)
-
-| Campo | Mín | Base | Máx | Descrição |
-|-------|-----|------|-----|-----------|
-| Capital Inicial | 8.000 | 10.000 | 12.000 | Valor inicial |
-| Aporte Mensal | 800 | 1.000 | 1.200 | Contribuição mensal |
-| Rentabilidade | 8% | 10% | 12% | Taxa anual |
-
-### Regras de Validação
-
-1. **Determinístico fora do range**: Erro se `Det < Min` ou `Det > Max`
-2. **Min > Max**: Combinação inválida
-3. **Preenchimento parcial**: Min+Det sem Max (ou vice-versa)
-4. **Apenas Base**: Simulação determinística (sem Monte Carlo)
-5. **Min + Max**: Monte Carlo ativado automaticamente
-
-### Gráfico de Evolução (Monte Carlo)
-
-```
-    ┌────────────────────────────────────────────┐
-    │            Túnel Min-Max (azul claro)      │
-    │        ┌────────────────────────────┐      │
-    │        │   Túnel P10-P90 (azul)     │      │
-    │        │    ╭───────────────────╮   │      │
-    │        │   ╱ Média (tracejada)   ╲  │      │
-    │    ●──●──●──●──●──●──●              │      │
-    │    Determinística (sólida + markers)│      │
-    └────────────────────────────────────────────┘
-```
-
-### Tabela Expandida (Monte Carlo)
-
-| Ano | Total Investido | Saldo (Det.) | Saldo (Média) | Saldo (Mín) | Saldo (Máx) |
-|-----|-----------------|--------------|---------------|-------------|-------------|
-| 0   | R$ 10.000       | R$ 10.000    | R$ 10.000     | R$ 8.000    | R$ 12.000   |
-| 5   | R$ 70.000       | R$ 93.890    | R$ 95.234     | R$ 78.456   | R$ 115.678  |
-| 10  | R$ 130.000      | R$ 231.915   | R$ 245.123    | R$ 189.456  | R$ 312.789  |
-
-## 🛠️ Tecnologias
-
-| Tecnologia | Versão | Uso |
-|------------|--------|-----|
-| **Python** | 3.10+ | Linguagem base |
-| **PySide6** | 6.5+ | Interface gráfica (Qt) |
-| **PySide6-WebEngine** | 6.5+ | Renderização Plotly |
-| **Plotly** | 5.18+ | Gráficos interativos |
-| **NumPy** | 1.24+ | Monte Carlo vetorizado |
-| **Matplotlib** | 3.7+ | Gráficos legados (opcional) |
-
-## 📝 Fórmulas
-
-### Juros Compostos
-```
-M(n) = M(n-1) × (1 + i) + PMT
-```
-
-### Monte Carlo - Distribuição Normal
-```
-μ = (Min + Max) / 2
-σ = (Max - Min) / 6
-X ~ N(μ, σ²) clipado em [Min, Max]
-```
-
-### Sensibilidade (Derivadas Parciais)
-- **dM/dt**: Velocidade de crescimento
-- **dM/da**: Potência do aporte
-- **dM/dC**: Eficiência do capital
-- **dM/di**: Sensibilidade à taxa
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT.
-
----
-
-**Desenvolvido com ❤️ em Python**
 
 ## 🗂️ Estrutura do Projeto
 
