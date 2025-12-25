@@ -8,8 +8,155 @@ import math
 import numpy as np
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, date
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Callable
 from pathlib import Path
+
+
+# =============================================================================
+# TAXA LIVRE DE RISCO (CDI)
+# =============================================================================
+
+# Cache global para a taxa CDI
+_cached_cdi_rate: Optional[float] = None
+_cdi_last_fetch: Optional[datetime] = None
+_cdi_source: str = "fallback"  # "b3", "manual", "fallback"
+
+def fetch_cdi_rate_from_bcb() -> Optional[float]:
+    """
+    Busca a taxa CDI anualizada via API do Banco Central.
+    
+    O CDI (Taxa DI) é calculado e publicado oficialmente pela B3.
+    O BCB disponibiliza esses dados via API do SGS (Série 12).
+    
+    Returns:
+        Taxa CDI anualizada como decimal (ex: 0.1175 para 11.75%) ou None se falhar.
+    """
+    import urllib.request
+    import ssl
+    
+    try:
+        # URL da API do BCB - Série 12 (CDI da B3) - Último valor
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json"
+        
+        # Criar contexto SSL que ignora verificação (alguns sistemas têm problemas com certificados)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        
+        # Fazer requisição com timeout
+        request = urllib.request.Request(url, headers={'User-Agent': 'PyInvest/1.0'})
+        with urllib.request.urlopen(request, timeout=10, context=context) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            
+            if data and len(data) > 0:
+                # O valor vem como string com vírgula brasileira (ex: "0,0453")
+                # A Série 12 contém a taxa CDI DIÁRIA (overnight), não anualizada
+                valor_str = data[0].get('valor', '0')
+                valor_str = valor_str.replace(',', '.')
+                taxa_diaria_percentual = float(valor_str)
+                
+                # Converter de percentual para decimal (0.0453% → 0.000453)
+                taxa_diaria = taxa_diaria_percentual / 100.0
+                
+                # Anualizar usando juros compostos (252 dias úteis por ano)
+                # Fórmula: (1 + taxa_diária)^252 - 1
+                taxa_anual = (1 + taxa_diaria) ** 252 - 1
+                
+                return taxa_anual
+        
+        return None
+        
+    except Exception as e:
+        print(f"[CDI] Erro ao buscar taxa do BCB: {e}")
+        return None
+
+
+def get_risk_free_rate(
+    force_refresh: bool = False,
+    fallback_rate: float = 0.10,
+    on_manual_input_needed: Optional[Callable[[], Optional[float]]] = None
+) -> float:
+    """
+    Obtém a taxa livre de risco (CDI) com cache e fallback.
+    
+    Args:
+        force_refresh: Se True, ignora cache e busca novamente
+        fallback_rate: Taxa padrão caso a busca falhe (10% = 0.10)
+        on_manual_input_needed: Callback para solicitar input manual do usuário
+        
+    Returns:
+        Taxa CDI anualizada como decimal (ex: 0.1175 para 11.75%)
+    """
+    global _cached_cdi_rate, _cdi_last_fetch, _cdi_source
+    
+    # Verificar cache (válido por 24 horas)
+    if not force_refresh and _cached_cdi_rate is not None and _cdi_last_fetch is not None:
+        cache_age = (datetime.now() - _cdi_last_fetch).total_seconds()
+        if cache_age < 86400:  # 24 horas em segundos
+            return _cached_cdi_rate
+    
+    # Tentar buscar do BCB
+    rate = fetch_cdi_rate_from_bcb()
+    
+    if rate is not None:
+        _cached_cdi_rate = rate
+        _cdi_last_fetch = datetime.now()
+        _cdi_source = "b3"
+        print(f"[CDI] Taxa obtida da B3 (via API BCB): {rate * 100:.2f}% a.a.")
+        return rate
+    
+    # Falha na busca - tentar input manual
+    if on_manual_input_needed is not None:
+        manual_rate = on_manual_input_needed()
+        if manual_rate is not None:
+            _cached_cdi_rate = manual_rate
+            _cdi_last_fetch = datetime.now()
+            _cdi_source = "manual"
+            return manual_rate
+    
+    # Usar fallback
+    _cdi_source = "fallback"
+    print(f"[CDI] Usando taxa padrão: {fallback_rate * 100:.2f}% a.a.")
+    return fallback_rate
+
+
+def get_cdi_info() -> dict:
+    """
+    Retorna informações sobre a taxa CDI atual.
+    
+    Returns:
+        Dict com 'rate' (taxa anual), 'monthly' (taxa mensal), 
+        'source' (origem) e 'source_label' (descrição da origem)
+    """
+    global _cached_cdi_rate, _cdi_source
+    
+    rate = _cached_cdi_rate if _cached_cdi_rate is not None else 0.10
+    
+    # Calcular taxa mensal equivalente: (1 + taxa_anual)^(1/12) - 1
+    monthly_rate = (1 + rate) ** (1/12) - 1
+    
+    source_labels = {
+        "b3": "🌐 B3 - Bolsa do Brasil (Online)",
+        "manual": "✏️ Digitado pelo usuário",
+        "fallback": "⚙️ Valor padrão (10%)"
+    }
+    
+    return {
+        'rate': rate,
+        'rate_percent': rate * 100,
+        'monthly': monthly_rate,
+        'monthly_percent': monthly_rate * 100,
+        'source': _cdi_source,
+        'source_label': source_labels.get(_cdi_source, "Desconhecido")
+    }
+
+
+def clear_cdi_cache():
+    """Limpa o cache da taxa CDI."""
+    global _cached_cdi_rate, _cdi_last_fetch, _cdi_source
+    _cached_cdi_rate = None
+    _cdi_last_fetch = None
+    _cdi_source = "fallback"
 
 
 # =============================================================================
@@ -490,16 +637,20 @@ def calculate_risk_metrics(
     final_balances: np.ndarray,
     meta: float,
     capital_inicial: float,
+    aporte_mensal: float = 0.0,
+    periodo_anos: int = 1,
     risk_free_rate: float = 0.10  # CDI ~10% a.a.
 ) -> RiskMetrics:
     """
     Calcula métricas de risco.
     
     Args:
-        final_balances: Array com saldos finais
+        final_balances: Array com saldos finais das simulações
         meta: Meta de patrimônio
         capital_inicial: Capital inicial investido
-        risk_free_rate: Taxa livre de risco (para Sharpe)
+        aporte_mensal: Valor do aporte mensal
+        periodo_anos: Período em anos da simulação
+        risk_free_rate: Taxa livre de risco anual (para Sharpe)
         
     Returns:
         RiskMetrics com todas as métricas
@@ -508,39 +659,72 @@ def calculate_risk_metrics(
     if n == 0:
         return RiskMetrics()
     
-    # Probabilidade de sucesso (atingir meta)
+    # Capital total investido (inicial + aportes)
+    meses = periodo_anos * 12
+    capital_total_investido = capital_inicial + (aporte_mensal * meses)
+    
+    # Estatísticas básicas
+    saldo_medio = np.mean(final_balances)
+    volatility = np.std(final_balances)
+    p5 = np.percentile(final_balances, 5)
+    
+    # =========================================================================
+    # 1. PROBABILIDADE DE SUCESSO (atingir meta)
+    # =========================================================================
     success_count = np.sum(final_balances >= meta)
     prob_success = (success_count / n) * 100
     
-    # Probabilidade de ruína (saldo <= capital inicial)
-    ruin_count = np.sum(final_balances <= capital_inicial)
+    # =========================================================================
+    # 2. PROBABILIDADE DE RUÍNA (saldo < capital inicial)
+    # =========================================================================
+    ruin_count = np.sum(final_balances < capital_inicial)
     prob_ruin = (ruin_count / n) * 100
     
-    # VaR 95% (5º percentil - perda máxima com 95% de confiança)
-    var_95 = capital_inicial - np.percentile(final_balances, 5)
-    var_95 = max(0, var_95)  # VaR não pode ser negativo nesse contexto
+    # =========================================================================
+    # 3. VaR 95% (Value at Risk Relativo à Média)
+    # "Em relação ao saldo médio esperado, no pior caso (5%) você terá X a menos"
+    # =========================================================================
+    var_95 = saldo_medio - p5
+    var_95 = max(0, var_95)  # VaR não pode ser negativo
     
-    # CVaR (Expected Shortfall) - média das piores 5%
-    worst_5_pct = np.percentile(final_balances, 5)
-    worst_cases = final_balances[final_balances <= worst_5_pct]
-    cvar_95 = capital_inicial - np.mean(worst_cases) if len(worst_cases) > 0 else var_95
+    # =========================================================================
+    # 4. CVaR (Conditional VaR / Expected Shortfall - Relativo à Média)
+    # "Perda média esperada nos 5% piores cenários, em relação à média"
+    # =========================================================================
+    worst_cases = final_balances[final_balances <= p5]
+    worst_mean = np.mean(worst_cases) if len(worst_cases) > 0 else p5
+    cvar_95 = saldo_medio - worst_mean
     cvar_95 = max(0, cvar_95)
     
-    # Volatilidade (desvio padrão)
-    volatility = np.std(final_balances)
+    # =========================================================================
+    # 5. RAZÃO RISCO/RETORNO (usando capital TOTAL investido)
+    # =========================================================================
+    ganho_esperado = saldo_medio - capital_total_investido
+    if ganho_esperado > 0:
+        risk_return_ratio = var_95 / ganho_esperado
+    else:
+        risk_return_ratio = float('inf') if var_95 > 0 else 0
     
-    # Retorno médio
-    mean_return = np.mean(final_balances)
+    # =========================================================================
+    # 6. ÍNDICE DE SHARPE (retorno anualizado - CAGR)
+    # =========================================================================
+    if capital_total_investido > 0 and periodo_anos > 0:
+        # CAGR = Taxa de crescimento anual composta
+        cagr = (saldo_medio / capital_total_investido) ** (1 / periodo_anos) - 1
+    else:
+        cagr = 0
     
-    # Razão Risco/Retorno
-    gain = mean_return - capital_inicial
-    risk_return_ratio = (var_95 / gain) if gain > 0 else 0
+    # Retorno excedente (vs taxa livre de risco)
+    retorno_excedente = cagr - risk_free_rate
     
-    # Índice de Sharpe simplificado
-    # (Retorno médio - Taxa livre de risco) / Volatilidade
-    expected_rf = capital_inicial * (1 + risk_free_rate)
-    excess_return = mean_return - expected_rf
-    sharpe_ratio = (excess_return / volatility) if volatility > 0 else 0
+    # Volatilidade anualizada (aproximação: std / média * 100 para %)
+    volatilidade_percentual = (volatility / saldo_medio * 100) if saldo_medio > 0 else 0
+    
+    # Sharpe = Retorno excedente / Volatilidade (em termos relativos)
+    if volatilidade_percentual > 0:
+        sharpe_ratio = (retorno_excedente * 100) / volatilidade_percentual
+    else:
+        sharpe_ratio = 0 if retorno_excedente <= 0 else float('inf')
     
     return RiskMetrics(
         prob_success=float(prob_success),

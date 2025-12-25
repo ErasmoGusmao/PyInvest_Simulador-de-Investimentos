@@ -29,7 +29,8 @@ from core.statistics import (
     PercentileStats, RiskMetrics, ImplicitParameters,
     save_project, load_project,
     calculate_percentiles, extract_implicit_parameters, calculate_risk_metrics,
-    bootstrap_returns, normal_returns, t_student_returns
+    bootstrap_returns, normal_returns, t_student_returns,
+    get_risk_free_rate, clear_cdi_cache, get_cdi_info
 )
 from ui.styles_modern import get_modern_style, get_colors, apply_shadow
 from ui.plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
@@ -298,6 +299,13 @@ class ModernMainWindow(QMainWindow):
         export_scenarios_action = QAction("🎯 Exportar Cenários (CSV)", self)
         export_scenarios_action.triggered.connect(self._on_export_scenarios)
         export_menu.addAction(export_scenarios_action)
+        
+        # Menu Configurações
+        config_menu = menubar.addMenu("&Configurações")
+        
+        update_cdi_action = QAction("📈 Atualizar Taxa CDI", self)
+        update_cdi_action.triggered.connect(self._on_update_cdi_rate)
+        config_menu.addAction(update_cdi_action)
         
         # Menu Ajuda
         help_menu = menubar.addMenu("&Ajuda")
@@ -1034,7 +1042,7 @@ class ModernMainWindow(QMainWindow):
         hist_frame.setStyleSheet("""
             QFrame {
                 background: white;
-                border: 1px solid #E5E7EB;
+                border: none;
                 border-radius: 10px;
             }
         """)
@@ -1057,16 +1065,17 @@ class ModernMainWindow(QMainWindow):
         stats_frame.setStyleSheet("""
             QFrame {
                 background: white;
-                border: 1px solid #E5E7EB;
+                border: none;
                 border-radius: 10px;
             }
         """)
         stats_inner = QVBoxLayout(stats_frame)
-        stats_inner.setContentsMargins(16, 12, 16, 12)
+        stats_inner.setContentsMargins(16, 0, 16, 12)  # Topo zerado para alinhar com título do histograma
         stats_inner.setSpacing(8)
         
         stats_title = QLabel("📈 Estatísticas de Saldos Finais")
         stats_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #374151; background: transparent;")
+        stats_title.setFixedHeight(20)  # Mesma altura do título do histograma
         stats_inner.addWidget(stats_title)
         
         # Painel de estatísticas (sem título duplicado)
@@ -1102,20 +1111,48 @@ class ModernMainWindow(QMainWindow):
         metrics_title.setStyleSheet("font-size: 16px; font-weight: 600; color: #1F2937; background: transparent;")
         metrics_inner.addWidget(metrics_title)
         
-        # Grid 2x3 de cards
+        # Grid 2x4 de cards (8 cartões)
         metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(16)
+        metrics_grid.setSpacing(10)
         metrics_grid.setContentsMargins(0, 0, 0, 0)
         
-        # Criar cards de métricas
+        # Criar cards de métricas (Grid 2x4 - 8 cartões)
         self.risk_cards = {}
         card_configs = [
-            ('success', '✅ Prob. Sucesso', '—%', 'Chance de atingir a meta', '#DCFCE7', '#16A34A', 0, 0),
-            ('ruin', '❌ Prob. Ruína', '—%', 'Chance de perder capital', '#FEE2E2', '#DC2626', 0, 1),
-            ('var', '⚠️ VaR 95%', 'R$ —', 'Perda máxima esperada', '#FEF3C7', '#D97706', 0, 2),
-            ('volatility', '📊 Volatilidade', 'R$ —', 'Desvio padrão dos resultados', '#F3E8FF', '#7C3AED', 1, 0),
-            ('ratio', '⚖️ Risco/Retorno', '—', 'VaR / Ganho esperado', '#FCE7F3', '#DB2777', 1, 1),
-            ('sharpe', '📈 Índice Sharpe', '—', 'Retorno ajustado ao risco', '#DBEAFE', '#2563EB', 1, 2),
+            # Linha 1: Probabilidades, VaR e CVaR
+            ('success', '✅ Prob. Sucesso', '—%', 
+             'Percentual de cenários onde você atinge sua meta final\n'
+             'P(Sucesso) = (# Saldos ≥ Meta) ÷ Total × 100%', 
+             '#DCFCE7', '#16A34A', 0, 0),
+            ('ruin', '❌ Prob. Ruína', '—%', 
+             'Risco de perder dinheiro do capital investido\n'
+             'P(Ruína) = (# Saldos < Capital) ÷ Total × 100%', 
+             '#FEE2E2', '#DC2626', 0, 1),
+            ('var', '⚠️ VaR 95%', 'R$ —', 
+             'Perda máxima esperada em 5% dos piores cenários\n'
+             'VaR₉₅ = Média − P₅', 
+             '#FEF3C7', '#D97706', 0, 2),
+            ('cvar', '🍷 CVaR 95%', 'R$ —', 
+             'Média das perdas nos 5% piores cenários (cauda)\n'
+             'CVaR = E[X | X ≤ VaR] (Expected Shortfall)', 
+             '#FDF2F8', '#A52A2A', 0, 3),
+            # Linha 2: Volatilidade, Risco/Retorno e Sharpe
+            ('volatility', '📊 Volatilidade', 'R$ —', 
+             'Dispersão dos saldos finais em relação à média\n'
+             'σ = √[ Σ(Saldo − Média)² ÷ N ]', 
+             '#F3E8FF', '#6F42C1', 1, 0),
+            ('ratio', '⚖️ Risco/Retorno', '—', 
+             'Quanto de risco por cada real de ganho\n'
+             'Razão = VaR₉₅ ÷ Ganho Esperado', 
+             '#FCE7F3', '#DB2777', 1, 1),
+            ('sharpe', '📈 Sharpe Ratio', '—', 
+             'Retorno por unidade de risco tomada\n'
+             'Sharpe = (CAGR − CDI) ÷ Volatilidade', 
+             '#DBEAFE', '#2563EB', 1, 2),
+            ('cdi', '🏦 Taxa CDI', '—%', 
+             'Taxa livre de risco utilizada nos cálculos\n'
+             'Fonte: B3 (via API do Banco Central)', 
+             '#F0FDF4', '#15803D', 1, 3),
         ]
         
         for key, title, default_value, description, bg_color, text_color, row, col in card_configs:
@@ -1167,21 +1204,21 @@ class ModernMainWindow(QMainWindow):
         frame.setStyleSheet(f"""
             QFrame {{
                 background-color: {bg_color};
-                border-radius: 10px;
+                border-radius: 8px;
                 border: 1px solid {bg_color};
             }}
         """)
         frame.setMinimumHeight(100)
-        frame.setMaximumHeight(130)
+        frame.setMaximumHeight(140)
         
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(2)
         
         # Título
         title_label = QLabel(title)
         title_label.setStyleSheet(f"""
-            font-size: 12px; 
+            font-size: 11px; 
             font-weight: 600; 
             color: {text_color}; 
             background: transparent;
@@ -1191,7 +1228,7 @@ class ModernMainWindow(QMainWindow):
         # Valor
         value_label = QLabel(default_value)
         value_label.setStyleSheet(f"""
-            font-size: 24px; 
+            font-size: 18px; 
             font-weight: bold; 
             color: {text_color}; 
             background: transparent;
@@ -1208,9 +1245,13 @@ class ModernMainWindow(QMainWindow):
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
         
+        # Tooltip com explicação simplificada
+        tooltip_text = description.replace('\n', ' - ')
+        frame.setToolTip(f"<b>{title}</b><br><br>{tooltip_text}")
+        
         layout.addStretch()
         
-        return {'frame': frame, 'value_label': value_label}
+        return {'frame': frame, 'value_label': value_label, 'desc_label': desc_label}
     
     def _create_projection_section(self, layout: QVBoxLayout):
         """Cria a seção da tabela de projeção."""
@@ -1954,39 +1995,22 @@ class ModernMainWindow(QMainWindow):
             )
             
             # =====================================================================
-            # 2. MÉTRICAS DE RISCO (usando dados reais)
+            # 2. MÉTRICAS DE RISCO (usando função centralizada)
             # =====================================================================
             
-            # VaR 95% = Média - P5 (perda máxima esperada com 95% confiança)
-            var_95 = self.percentile_stats.mean - self.percentile_stats.p5
+            # Obter taxa livre de risco (CDI) automaticamente
+            risk_free_rate = get_risk_free_rate(
+                fallback_rate=0.10,
+                on_manual_input_needed=self._ask_cdi_rate_manual
+            )
             
-            # Probabilidade de sucesso (atingir meta)
-            prob_success = (np.sum(simulated_balances >= meta) / len(simulated_balances)) * 100 if len(simulated_balances) > 0 else 0
-            
-            # Probabilidade de ruína (saldo <= capital inicial)
-            prob_ruin = (np.sum(simulated_balances <= capital) / len(simulated_balances)) * 100 if len(simulated_balances) > 0 else 0
-            
-            # CVaR (Expected Shortfall)
-            worst_cases = simulated_balances[simulated_balances <= self.percentile_stats.p5]
-            cvar = self.percentile_stats.mean - np.mean(worst_cases) if len(worst_cases) > 0 else var_95
-            
-            # Razão Risco/Retorno
-            ganho_esperado = self.percentile_stats.mean - capital
-            risk_return = var_95 / ganho_esperado if ganho_esperado > 0 else 0
-            
-            # Índice de Sharpe simplificado (vs CDI ~10%)
-            rf_return = capital * 1.10  # CDI
-            excess_return = self.percentile_stats.mean - rf_return
-            sharpe = excess_return / self.percentile_stats.std_dev if self.percentile_stats.std_dev > 0 else 0
-            
-            self.risk_metrics = RiskMetrics(
-                prob_success=prob_success,
-                prob_ruin=prob_ruin,
-                var_95=var_95,
-                cvar_95=cvar,
-                sharpe_ratio=sharpe,
-                risk_return_ratio=risk_return,
-                volatility=self.percentile_stats.std_dev
+            self.risk_metrics = calculate_risk_metrics(
+                final_balances=simulated_balances,
+                meta=meta,
+                capital_inicial=capital,
+                aporte_mensal=aporte,
+                periodo_anos=periodo,
+                risk_free_rate=risk_free_rate
             )
             
             # Atualizar cards de risco na aba Análise de Risco
@@ -2054,8 +2078,8 @@ class ModernMainWindow(QMainWindow):
                 )
             
             self.status_bar.showMessage(
-                f"📊 Estatísticas calculadas | Prob. Sucesso: {prob_success:.1f}% | "
-                f"VaR 95%: {format_currency(var_95)}"
+                f"📊 Estatísticas calculadas | Prob. Sucesso: {self.risk_metrics.prob_success:.1f}% | "
+                f"VaR 95%: {format_currency(self.risk_metrics.var_95)}"
             )
             
         except Exception as e:
@@ -2166,6 +2190,53 @@ class ModernMainWindow(QMainWindow):
         # Retorna melhor aproximação
         return round((r_min + r_max) / 2, 2)
     
+    def _ask_cdi_rate_manual(self) -> Optional[float]:
+        """
+        Solicita ao usuário a taxa CDI manualmente via diálogo.
+        
+        Chamado como fallback quando a busca automática da B3 falha.
+        
+        Returns:
+            Taxa CDI como decimal (ex: 0.1175 para 11.75%) ou None se cancelado.
+        """
+        from PySide6.QtWidgets import QInputDialog
+        
+        text, ok = QInputDialog.getText(
+            self,
+            "Taxa CDI",
+            "Não foi possível obter a taxa CDI automaticamente.\n\n"
+            "Digite a taxa CDI anual atual (%):\n"
+            "(Ex: 11.75 para 11,75% a.a.)",
+            text="11.75"
+        )
+        
+        if ok and text:
+            try:
+                # Aceitar vírgula ou ponto como separador decimal
+                text = text.replace(",", ".").strip()
+                taxa_percentual = float(text)
+                
+                # Validar range razoável (0% a 50%)
+                if 0 <= taxa_percentual <= 50:
+                    self.status_bar.showMessage(
+                        f"📊 Taxa CDI definida manualmente: {taxa_percentual:.2f}% a.a."
+                    )
+                    return taxa_percentual / 100.0
+                else:
+                    QMessageBox.warning(
+                        self, 
+                        "Valor Inválido", 
+                        "A taxa deve estar entre 0% e 50%.\nUsando valor padrão de 10%."
+                    )
+            except ValueError:
+                QMessageBox.warning(
+                    self, 
+                    "Formato Inválido", 
+                    "Digite um número válido.\nUsando valor padrão de 10%."
+                )
+        
+        return None
+    
     def _update_risk_cards(self, metrics: RiskMetrics):
         """Atualiza os cards de métricas de risco na aba Análise de Risco."""
         if not hasattr(self, 'risk_cards'):
@@ -2178,26 +2249,46 @@ class ModernMainWindow(QMainWindow):
         def fmt_percent(value):
             return f"{value:.1f}%".replace(".", ",")
         
-        # Atualizar cada card
+        # Atualizar cada card (8 cartões)
         self.risk_cards['success'].setText(fmt_percent(metrics.prob_success))
         self.risk_cards['ruin'].setText(fmt_percent(metrics.prob_ruin))
         self.risk_cards['var'].setText(fmt_currency(metrics.var_95))
+        self.risk_cards['cvar'].setText(fmt_currency(metrics.cvar_95))
         self.risk_cards['volatility'].setText(fmt_currency(metrics.volatility))
         self.risk_cards['ratio'].setText(f"{metrics.risk_return_ratio:.2f}".replace(".", ","))
         self.risk_cards['sharpe'].setText(f"{metrics.sharpe_ratio:.2f}".replace(".", ","))
         
+        # Atualizar card do CDI com a taxa atual
+        cdi_info = get_cdi_info()
+        self.risk_cards['cdi'].setText(f"{cdi_info['rate_percent']:.2f}%".replace(".", ","))
+        
         # Atualizar resumo
         if hasattr(self, 'risk_summary_label'):
             capital = self._parse_value(self.input_capital.get_base_value()) or 10000
-            ganho = self.percentile_stats.mean - capital if self.percentile_stats else 0
+            aporte = self._parse_value(self.input_aporte.get_base_value()) or 0
+            periodo = int(self._parse_value(self.input_periodo.text()) or 10)
+            
+            # Capital total investido
+            capital_total = capital + (aporte * periodo * 12)
+            ganho = self.percentile_stats.mean - capital_total if self.percentile_stats else 0
+            
+            # Obter informações do CDI
+            cdi_info = get_cdi_info()
             
             summary_html = f"""
-            <div style="line-height: 1.6;">
-                <b>Resumo da Simulação Monte Carlo:</b><br>
+            <div style="line-height: 1.8;">
+                <b>📊 Resumo da Simulação Monte Carlo:</b><br>
+                <hr style="border-color: #E5E7EB;">
                 • <b>Probabilidade de Sucesso:</b> {fmt_percent(metrics.prob_success)} de chance de atingir a meta<br>
                 • <b>Value at Risk (VaR 95%):</b> Em 95% dos cenários, a perda máxima é de {fmt_currency(metrics.var_95)}<br>
-                • <b>Ganho Esperado:</b> {fmt_currency(ganho)} (Média - Capital Inicial)<br>
-                • <b>Índice Sharpe:</b> {metrics.sharpe_ratio:.2f} (quanto maior, melhor o retorno ajustado ao risco)
+                • <b>Capital Total Investido:</b> {fmt_currency(capital_total)} (inicial + aportes)<br>
+                • <b>Ganho Esperado:</b> {fmt_currency(ganho)} (Média - Capital Total)<br>
+                • <b>Índice Sharpe:</b> {metrics.sharpe_ratio:.2f} (quanto maior, melhor o retorno ajustado ao risco)<br>
+                <hr style="border-color: #E5E7EB;">
+                <b>📈 Taxa Livre de Risco (CDI):</b><br>
+                • <b>Taxa Anual:</b> {cdi_info['rate_percent']:.2f}% a.a.<br>
+                • <b>Taxa Mensal:</b> {cdi_info['monthly_percent']:.4f}% a.m.<br>
+                • <b>Origem:</b> {cdi_info['source_label']}
             </div>
             """
             self.risk_summary_label.setText(summary_html)
@@ -2429,6 +2520,49 @@ class ModernMainWindow(QMainWindow):
             QMessageBox.information(self, "Sucesso", f"Cenários exportados:\n{filepath}")
         else:
             QMessageBox.critical(self, "Erro", f"Falha ao exportar:\n{error}")
+    
+    def _on_update_cdi_rate(self):
+        """Atualiza a taxa CDI da B3 ou solicita input manual."""
+        from PySide6.QtWidgets import QInputDialog
+        
+        # Perguntar se quer buscar automaticamente ou digitar
+        options = ["🌐 Buscar da B3 (Internet)", "✏️ Digitar manualmente"]
+        choice, ok = QInputDialog.getItem(
+            self,
+            "Atualizar Taxa CDI",
+            "Como deseja atualizar a taxa CDI?",
+            options,
+            0,  # índice padrão
+            False  # não editável
+        )
+        
+        if not ok:
+            return
+        
+        if choice == options[0]:
+            # Buscar da B3 (via API do BCB)
+            clear_cdi_cache()  # Limpar cache para forçar nova busca
+            rate = get_risk_free_rate(force_refresh=True, fallback_rate=0.10)
+            
+            if rate:
+                QMessageBox.information(
+                    self,
+                    "Taxa CDI Atualizada",
+                    f"Taxa CDI obtida da B3:\n\n"
+                    f"<b>{rate * 100:.2f}% a.a.</b>\n\n"
+                    f"Esta taxa será usada nos cálculos do Índice de Sharpe."
+                )
+                self.status_bar.showMessage(f"📈 Taxa CDI atualizada: {rate * 100:.2f}% a.a.")
+        else:
+            # Digitar manualmente
+            manual_rate = self._ask_cdi_rate_manual()
+            if manual_rate:
+                QMessageBox.information(
+                    self,
+                    "Taxa CDI Definida",
+                    f"Taxa CDI definida manualmente:\n\n"
+                    f"<b>{manual_rate * 100:.2f}% a.a.</b>"
+                )
     
     def _on_about(self):
         """Exibe diálogo Sobre."""
