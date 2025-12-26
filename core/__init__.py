@@ -13,10 +13,6 @@ from .calculation import (
     run_full_simulation,
     run_monte_carlo_simulation
 )
-from .worker import (
-    SimulationWorker,
-    SimulationSignals
-)
 from .events import (
     ExtraordinaryEvent,
     EventsManager,
@@ -57,9 +53,6 @@ __all__ = [
     "MonteCarloResult",
     "run_full_simulation",
     "run_monte_carlo_simulation",
-    # Worker
-    "SimulationWorker",
-    "SimulationSignals",
     # Events
     "ExtraordinaryEvent",
     "EventsManager",
