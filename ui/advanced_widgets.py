@@ -175,7 +175,7 @@ class PercentileStatsPanel(QWidget):
         stats_frame = QFrame()
         stats_frame.setStyleSheet("""
             QFrame {
-                background-color: transparent;
+                background-color: #FAFAFA;
                 border: 1px solid #E5E7EB;
                 border-radius: 8px;
                 padding: 12px;
@@ -183,14 +183,12 @@ class PercentileStatsPanel(QWidget):
         """)
         
         stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(4, 4, 4, 4)
-        stats_layout.setAlignment(Qt.AlignCenter)  # Centralizar conteúdo
+        stats_layout.setContentsMargins(8, 8, 8, 8)
         
         self.stats_label = QLabel("Execute uma simulação para ver estatísticas")
-        self.stats_label.setStyleSheet("font-size: 14px; color: #374151; background: transparent;")
+        self.stats_label.setStyleSheet("font-size: 13px; color: #374151; background: transparent;")
         self.stats_label.setTextFormat(Qt.RichText)
         self.stats_label.setWordWrap(True)
-        self.stats_label.setAlignment(Qt.AlignCenter)  # Centralizar label
         stats_layout.addWidget(self.stats_label)
         
         layout.addWidget(stats_frame)
@@ -198,54 +196,54 @@ class PercentileStatsPanel(QWidget):
     def update_stats(self, stats: PercentileStats, deterministic: Optional[float] = None):
         """Atualiza estatísticas."""
         html = f"""
-        <table style="width:100%; border-collapse: collapse; border: none; font-size: 14px;">
+        <table style="width:100%; border-collapse: collapse;">
             <tr style="background-color: #FEE2E2;">
-                <td style="padding: 6px 8px; border: none;"><b>Saldo Mínimo (P5):</b></td>
-                <td style="padding: 6px 8px; text-align: right; color: #DC2626; border: none;">{format_currency(stats.p5)}</td>
+                <td style="padding: 8px;"><b>Saldo Mínimo (P5):</b></td>
+                <td style="padding: 8px; text-align: right; color: #DC2626;">{format_currency(stats.p5)}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Saldo P25:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{format_currency(stats.p25)}</td>
+                <td style="padding: 8px;"><b>Saldo P25:</b></td>
+                <td style="padding: 8px; text-align: right;">{format_currency(stats.p25)}</td>
             </tr>
             <tr style="background-color: #FEF3C7;">
-                <td style="padding: 6px 8px; border: none;"><b>Saldo Mediano (P50):</b></td>
-                <td style="padding: 6px 8px; text-align: right; color: #D97706; font-weight: bold; border: none;">{format_currency(stats.p50)}</td>
+                <td style="padding: 8px;"><b>Saldo Mediano (P50):</b></td>
+                <td style="padding: 8px; text-align: right; color: #D97706; font-weight: bold;">{format_currency(stats.p50)}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Saldo P75:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{format_currency(stats.p75)}</td>
+                <td style="padding: 8px;"><b>Saldo P75:</b></td>
+                <td style="padding: 8px; text-align: right;">{format_currency(stats.p75)}</td>
             </tr>
             <tr style="background-color: #DCFCE7;">
-                <td style="padding: 6px 8px; border: none;"><b>Saldo Máximo (P95):</b></td>
-                <td style="padding: 6px 8px; text-align: right; color: #16A34A; border: none;">{format_currency(stats.p95)}</td>
+                <td style="padding: 8px;"><b>Saldo Máximo (P95):</b></td>
+                <td style="padding: 8px; text-align: right; color: #16A34A;">{format_currency(stats.p95)}</td>
             </tr>
         """
         
         if deterministic:
             html += f"""
             <tr style="background-color: #DBEAFE;">
-                <td style="padding: 6px 8px; border: none;"><b>Saldo Determinístico:</b></td>
-                <td style="padding: 6px 8px; text-align: right; color: #2563EB; font-weight: bold; border: none;">{format_currency(deterministic)}</td>
+                <td style="padding: 8px;"><b>Saldo Determinístico:</b></td>
+                <td style="padding: 8px; text-align: right; color: #2563EB; font-weight: bold;">{format_currency(deterministic)}</td>
             </tr>
             """
         
         html += f"""
-            <tr><td colspan="2" style="padding: 3px; border: none;"><hr style="border-color: #E5E7EB;"></td></tr>
+            <tr><td colspan="2" style="padding: 4px;"><hr style="border-color: #E5E7EB;"></td></tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Média:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{format_currency(stats.mean)}</td>
+                <td style="padding: 8px;"><b>Média:</b></td>
+                <td style="padding: 8px; text-align: right;">{format_currency(stats.mean)}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Moda:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{format_currency(stats.mode)}</td>
+                <td style="padding: 8px;"><b>Moda:</b></td>
+                <td style="padding: 8px; text-align: right;">{format_currency(stats.mode)}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Desvio Padrão:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{format_currency(stats.std_dev)}</td>
+                <td style="padding: 8px;"><b>Desvio Padrão:</b></td>
+                <td style="padding: 8px; text-align: right;">{format_currency(stats.std_dev)}</td>
             </tr>
             <tr>
-                <td style="padding: 6px 8px; border: none;"><b>Coef. Variação:</b></td>
-                <td style="padding: 6px 8px; text-align: right; border: none;">{stats.coef_variation:.1f}%</td>
+                <td style="padding: 8px;"><b>Coef. Variação:</b></td>
+                <td style="padding: 8px; text-align: right;">{stats.coef_variation:.1f}%</td>
             </tr>
         </table>
         """
@@ -371,7 +369,7 @@ class DistributionChart(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self.chart_view = QWebEngineView()
-        self.chart_view.setMinimumHeight(500)  # Altura máxima para ocupar espaço
+        self.chart_view.setMinimumHeight(350)
         self.chart_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.chart_view)
         
@@ -387,30 +385,6 @@ class DistributionChart(QWidget):
         """
         self.chart_view.setHtml(html)
     
-    def _show_deterministic_message(self, final_balance: float):
-        """Mostra mensagem quando em modo determinístico (sem variabilidade)."""
-        # Formatar valor
-        valor_fmt = f"R$ {final_balance:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        
-        html = f"""
-        <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;
-                    height:100%;color:#6B7280;font-family:sans-serif;text-align:center;padding:20px;">
-            <div style="font-size:48px;margin-bottom:16px;">📊</div>
-            <div style="font-size:16px;font-weight:600;color:#374151;margin-bottom:12px;">
-                Modo Determinístico
-            </div>
-            <div style="font-size:14px;line-height:1.6;max-width:400px;">
-                Não há distribuição para exibir porque todos os parâmetros são fixos.<br><br>
-                <b>Saldo Final Único:</b> {valor_fmt}<br><br>
-                <span style="color:#9CA3AF;font-size:12px;">
-                    💡 Para ver a distribuição, defina valores Mín/Máx nos parâmetros<br>
-                    (Capital, Aporte ou Rentabilidade)
-                </span>
-            </div>
-        </div>
-        """
-        self.chart_view.setHtml(html)
-    
     def update_chart(
         self, 
         final_balances: list,
@@ -421,7 +395,7 @@ class DistributionChart(QWidget):
         """Atualiza histograma com autosize responsivo."""
         import numpy as np
         
-        if not final_balances or len(final_balances) < 2:
+        if not final_balances:
             self._show_empty()
             return
         
@@ -429,20 +403,19 @@ class DistributionChart(QWidget):
         hist, bins = np.histogram(final_balances, bins=30)
         bin_centers = [(bins[i] + bins[i+1]) / 2 for i in range(len(bins)-1)]
         
-        # Converter para milhões para melhor visualização (garantir tipos Python nativos)
-        bin_centers_m = [float(b) / 1_000_000 for b in bin_centers]
-        hist_list = [int(h) for h in hist]  # Converter np.int64 para int Python
-        meta_m = float(meta) / 1_000_000
-        p50_m = float(stats.p50) / 1_000_000
-        p5_m = float(stats.p5) / 1_000_000
-        det_m = float(deterministic) / 1_000_000 if deterministic else None
+        # Converter para milhões para melhor visualização
+        bin_centers_m = [b / 1_000_000 for b in bin_centers]
+        meta_m = meta / 1_000_000
+        p50_m = stats.p50 / 1_000_000
+        p5_m = stats.p5 / 1_000_000
+        det_m = deterministic / 1_000_000 if deterministic else None
         
         # Construir shapes
         shapes_list = [
             f"""{{ type: 'line', x0: {meta_m}, x1: {meta_m}, y0: 0, y1: 1, yref: 'paper',
                 line: {{ color: '#F59E0B', width: 3 }} }}""",
             f"""{{ type: 'line', x0: {p50_m}, x1: {p50_m}, y0: 0, y1: 1, yref: 'paper',
-                line: {{ color: '#22C55E', width: 2, dash: 'dash' }} }}""",
+                line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}""",
             f"""{{ type: 'line', x0: {p5_m}, x1: {p5_m}, y0: 0, y1: 1, yref: 'paper',
                 line: {{ color: '#DC2626', width: 2, dash: 'dot' }} }}"""
         ]
@@ -450,25 +423,25 @@ class DistributionChart(QWidget):
         if det_m:
             shapes_list.append(
                 f"""{{ type: 'line', x0: {det_m}, x1: {det_m}, y0: 0, y1: 1, yref: 'paper',
-                    line: {{ color: '#1F2937', width: 2 }} }}"""
+                    line: {{ color: '#10B981', width: 2 }} }}"""
             )
         
         shapes = ','.join(shapes_list)
         
         # Construir annotations
         annot_list = [
-            f"""{{ x: {meta_m}, y: 1, yref: 'paper', text: '<b>Meta</b>', showarrow: false,
+            f"""{{ x: {meta_m}, y: 1, yref: 'paper', text: 'Meta', showarrow: false,
                 font: {{ color: '#F59E0B', size: 11 }}, yanchor: 'bottom' }}""",
             f"""{{ x: {p50_m}, y: 0.92, yref: 'paper', text: 'Mediana', showarrow: false,
-                font: {{ color: '#22C55E', size: 11 }}, yanchor: 'bottom' }}""",
+                font: {{ color: '#EF4444', size: 11 }}, yanchor: 'bottom' }}""",
             f"""{{ x: {p5_m}, y: 0.84, yref: 'paper', text: 'P5', showarrow: false,
-                font: {{ color: '#DC2626', size: 11 }}, yanchor: 'bottom', xanchor: 'right' }}"""
+                font: {{ color: '#DC2626', size: 11 }}, yanchor: 'bottom' }}"""
         ]
         
         if det_m:
             annot_list.append(
                 f"""{{ x: {det_m}, y: 0.76, yref: 'paper', text: 'Det.', showarrow: false,
-                    font: {{ color: '#1F2937', size: 11 }}, yanchor: 'bottom', xanchor: 'left' }}"""
+                    font: {{ color: '#10B981', size: 11 }}, yanchor: 'bottom' }}"""
             )
         
         annotations = ','.join(annot_list)
@@ -480,7 +453,7 @@ class DistributionChart(QWidget):
             <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
             <style>
                 body {{ margin: 0; padding: 0; }}
-                #chart {{ width: 100%; height: 100%; min-height: 500px; }}
+                #chart {{ width: 100%; height: 100%; min-height: 350px; }}
             </style>
         </head>
         <body>
@@ -488,7 +461,7 @@ class DistributionChart(QWidget):
             <script>
                 var data = [{{
                     x: {bin_centers_m},
-                    y: {hist_list},
+                    y: {list(hist)},
                     type: 'bar',
                     marker: {{
                         color: 'rgba(59, 130, 246, 0.7)',
@@ -498,11 +471,12 @@ class DistributionChart(QWidget):
                 }}];
                 
                 var layout = {{
+                    title: {{ text: 'Distribuição dos Saldos Finais', font: {{ size: 14 }} }},
                     xaxis: {{ title: 'Saldo Final (R$ Milhões)', gridcolor: '#E5E7EB' }},
                     yaxis: {{ title: 'Frequência', gridcolor: '#E5E7EB' }},
                     shapes: [{shapes}],
                     annotations: [{annotations}],
-                    margin: {{ l: 60, r: 30, t: 30, b: 50 }},
+                    margin: {{ l: 60, r: 30, t: 50, b: 50 }},
                     paper_bgcolor: 'white',
                     plot_bgcolor: 'white',
                     autosize: true

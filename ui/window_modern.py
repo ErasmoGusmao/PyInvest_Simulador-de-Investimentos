@@ -1176,7 +1176,7 @@ class ModernMainWindow(QMainWindow):
         summary_inner.setContentsMargins(20, 16, 20, 16)
         summary_inner.setSpacing(12)
         
-        summary_title = QLabel("📋 Resumo da Simulação")
+        summary_title = QLabel("📊 Resumo Monte Carlo")
         summary_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #374151; background: transparent;")
         summary_inner.addWidget(summary_title)
         
@@ -1524,6 +1524,7 @@ class ModernMainWindow(QMainWindow):
             self.mc_summary.setVisible(True)
             mc_text = (
                 f"<b>{result.n_simulations:,}</b> cenários simulados<br>"
+                f"Capital Total Investido: <b>{format_currency(result.total_invested)}</b><br>"
                 f"Saldo Final Médio: <b>{format_currency(result.final_balance_mean)}</b><br>"
                 f"Intervalo: {format_currency(result.final_balance_min)} → "
                 f"{format_currency(result.final_balance_max)}"
@@ -2004,13 +2005,17 @@ class ModernMainWindow(QMainWindow):
                 on_manual_input_needed=self._ask_cdi_rate_manual
             )
             
+            # Obter aportes extras do resultado (se disponível)
+            total_extra_deposits = result.params_used.get('total_extra_deposits', 0.0)
+            
             self.risk_metrics = calculate_risk_metrics(
                 final_balances=simulated_balances,
                 meta=meta,
                 capital_inicial=capital,
                 aporte_mensal=aporte,
                 periodo_anos=periodo,
-                risk_free_rate=risk_free_rate
+                risk_free_rate=risk_free_rate,
+                total_extra_deposits=total_extra_deposits
             )
             
             # Atualizar cards de risco na aba Análise de Risco
@@ -2264,12 +2269,14 @@ class ModernMainWindow(QMainWindow):
         
         # Atualizar resumo
         if hasattr(self, 'risk_summary_label'):
-            capital = self._parse_value(self.input_capital.get_base_value()) or 10000
-            aporte = self._parse_value(self.input_aporte.get_base_value()) or 0
-            periodo = int(self._parse_value(self.input_periodo.text()) or 10)
+            # =========================================================
+            # CORREÇÃO: Usar total_invested do resultado (já calculado)
+            # Em vez de recalcular com valores base dos inputs
+            # =========================================================
+            capital_total = 0.0
+            if hasattr(self, 'current_result') and self.current_result:
+                capital_total = self.current_result.total_invested
             
-            # Capital total investido
-            capital_total = capital + (aporte * periodo * 12)
             ganho = self.percentile_stats.mean - capital_total if self.percentile_stats else 0
             
             # Obter informações do CDI
@@ -2277,11 +2284,10 @@ class ModernMainWindow(QMainWindow):
             
             summary_html = f"""
             <div style="line-height: 1.8;">
-                <b>📊 Resumo da Simulação Monte Carlo:</b><br>
-                <hr style="border-color: #E5E7EB;">
                 • <b>Probabilidade de Sucesso:</b> {fmt_percent(metrics.prob_success)} de chance de atingir a meta<br>
+                • <b>Probabilidade de Ruína:</b> {fmt_percent(metrics.prob_ruin)} de risco de perder o capital investido<br>
                 • <b>Value at Risk (VaR 95%):</b> Em 95% dos cenários, a perda máxima é de {fmt_currency(metrics.var_95)}<br>
-                • <b>Capital Total Investido:</b> {fmt_currency(capital_total)} (inicial + aportes)<br>
+                • <b>Capital Total Investido:</b> {fmt_currency(capital_total)} (inicial + aportes + extras)<br>
                 • <b>Ganho Esperado:</b> {fmt_currency(ganho)} (Média - Capital Total)<br>
                 • <b>Índice Sharpe:</b> {metrics.sharpe_ratio:.2f} (quanto maior, melhor o retorno ajustado ao risco)<br>
                 <hr style="border-color: #E5E7EB;">

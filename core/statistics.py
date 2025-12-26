@@ -639,7 +639,8 @@ def calculate_risk_metrics(
     capital_inicial: float,
     aporte_mensal: float = 0.0,
     periodo_anos: int = 1,
-    risk_free_rate: float = 0.10  # CDI ~10% a.a.
+    risk_free_rate: float = 0.10,  # CDI ~10% a.a.
+    total_extra_deposits: float = 0.0  # NOVO: Aportes extraordinários
 ) -> RiskMetrics:
     """
     Calcula métricas de risco.
@@ -651,6 +652,7 @@ def calculate_risk_metrics(
         aporte_mensal: Valor do aporte mensal
         periodo_anos: Período em anos da simulação
         risk_free_rate: Taxa livre de risco anual (para Sharpe)
+        total_extra_deposits: Soma de todos os aportes extraordinários
         
     Returns:
         RiskMetrics com todas as métricas
@@ -659,9 +661,11 @@ def calculate_risk_metrics(
     if n == 0:
         return RiskMetrics()
     
-    # Capital total investido (inicial + aportes)
+    # =========================================================================
+    # CAPITAL TOTAL INVESTIDO = Inicial + Aportes Mensais + Aportes Extras
+    # =========================================================================
     meses = periodo_anos * 12
-    capital_total_investido = capital_inicial + (aporte_mensal * meses)
+    capital_total_investido = capital_inicial + (aporte_mensal * meses) + total_extra_deposits
     
     # Estatísticas básicas
     saldo_medio = np.mean(final_balances)
@@ -675,9 +679,10 @@ def calculate_risk_metrics(
     prob_success = (success_count / n) * 100
     
     # =========================================================================
-    # 2. PROBABILIDADE DE RUÍNA (saldo < capital inicial)
+    # 2. PROBABILIDADE DE RUÍNA (saldo < capital TOTAL investido)
+    # Ruína = perda do capital principal (incluindo aportes extras)
     # =========================================================================
-    ruin_count = np.sum(final_balances < capital_inicial)
+    ruin_count = np.sum(final_balances < capital_total_investido)
     prob_ruin = (ruin_count / n) * 100
     
     # =========================================================================

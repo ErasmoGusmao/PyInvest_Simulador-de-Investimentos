@@ -2,6 +2,28 @@
 
 ---
 
+## 🚀 Novidades v4.8 (Correção Capital Total Investido)
+
+### 🔧 Correção Crítica: Capital Total Investido
+- **Problema corrigido**: O Capital Total Investido agora inclui **todos os aportes extraordinários** (eventos extras).
+- **Fórmula correta**: `Capital Total = Capital Inicial + (Aporte Mensal × Meses) + Σ(Aportes Extras)`
+- **Impacto**: Métricas de risco (Prob. Ruína, Ganho Esperado) agora refletem o custo real da estratégia.
+
+### 📊 Probabilidade de Ruína Corrigida
+- **Antes**: Comparava saldo final apenas com Capital Inicial
+- **Agora**: Compara saldo final com **Capital Total Investido** (incluindo extras)
+- **Fórmula**: `P(Ruína) = (# Saldos < Capital Total) ÷ N × 100%`
+
+### 💡 Definições Atualizadas
+
+| Métrica | Definição |
+|---------|-----------|
+| **Capital Total Investido** | Soma total de todo o capital desembolsado pelo investidor, compreendendo o valor inicial, os aportes mensais recorrentes e todos os eventos extraordinários de entrada de capital. |
+| **Critério de Ruína** | Cenário onde o patrimônio final acumulado é inferior ao valor nominal total investido (perda de capital principal). |
+| **Ganho Esperado** | Diferença entre o saldo médio esperado e o capital total investido. |
+
+---
+
 ## 🚀 Novidades v4.7 (CDI B3 + Métricas de Risco Avançadas)
 
 ### 🏦 CDI Oficial da B3 (via API do Banco Central)
@@ -33,7 +55,7 @@ O painel de análise de risco exibe **8 cartões** com as principais métricas e
 | Card         | Descrição | Fórmula/Tooltip |
 |--------------|-----------|-----------------|
 | ✅ Prob. Sucesso | Chance de atingir a meta | P(Sucesso) = (# Saldos ≥ Meta) ÷ Total × 100% |
-| ❌ Prob. Ruína   | Risco de perder capital  | P(Ruína) = (# Saldos < Capital) ÷ Total × 100% |
+| ❌ Prob. Ruína   | Risco de perder capital **total** investido | P(Ruína) = (# Saldos < Capital Total) ÷ Total × 100% |
 | ⚠️ VaR 95%       | Perda máxima esperada em 5% dos piores cenários | VaR₉₅ = Média − P₅ |
 | 🍷 CVaR 95%      | Média das perdas nos 5% piores cenários | CVaR = E[X | X ≤ VaR] |
 | 📊 Volatilidade  | Dispersão dos saldos finais | σ = √[ Σ(Saldo − Média)² ÷ N ] |
