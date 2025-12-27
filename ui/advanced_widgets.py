@@ -14,6 +14,8 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from typing import List, Optional, Dict, Any
 import json
+import numpy as np
+import plotly.graph_objects as go
 
 from core.statistics import (
     PercentileStats, ImplicitParameters, RiskMetrics,
@@ -358,7 +360,12 @@ class ImplicitParametersTable(QWidget):
 
 
 class DistributionChart(QWidget):
-    """Gráfico de distribuição (histograma) dos saldos finais."""
+    """
+    Gráfico de distribuição (histograma) dos saldos finais.
+    
+    Usa plotly.graph_objects para garantir carregamento correto do Plotly.js
+    (mesmo padrão dos outros gráficos que funcionam).
+    """
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -385,111 +392,205 @@ class DistributionChart(QWidget):
         """
         self.chart_view.setHtml(html)
     
+    def _show_deterministic_message(self, balance: float):
+        """
+        Mostra mensagem quando em modo determinístico (sem Monte Carlo).
+        """
+        html = f"""
+        <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;
+                    height:100%;color:#6B7280;font-family:sans-serif;text-align:center;padding:20px;">
+            <div style="font-size:48px;margin-bottom:16px;">📊</div>
+            <div style="font-size:16px;font-weight:600;color:#374151;margin-bottom:8px;">
+                Modo Determinístico
+            </div>
+            <div style="font-size:14px;color:#6B7280;margin-bottom:16px;">
+                Sem simulação Monte Carlo, o saldo final é único:
+            </div>
+            <div style="font-size:24px;font-weight:700;color:#10B981;">
+                {format_currency(balance)}
+            </div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:16px;">
+                Ative Monte Carlo (ranges) ou Modo Expert para ver a distribuição de cenários
+            </div>
+        </div>
+        """
+        self.chart_view.setHtml(html)
+    
+    def _render_figure(self, fig: go.Figure):
+        """Renderiza figura Plotly no WebView (mesmo padrão dos outros gráficos)."""
+        html = fig.to_html(
+            include_plotlyjs='cdn',
+            full_html=True,
+            config={
+                'displayModeBar': True,
+                'modeBarButtonsToRemove': [
+                    'select2d', 'lasso2d', 'autoScale2d',
+                    'hoverClosestCartesian', 'hoverCompareCartesian',
+                    'toggleSpikelines'
+                ],
+                'displaylogo': False,
+                'responsive': True
+            }
+        )
+        self.chart_view.setHtml(html)
+    
     def update_chart(
         self, 
-        final_balances: list,
+        final_balances,
         stats: PercentileStats,
         meta: float,
-        deterministic: Optional[float] = None
+        deterministic: Optional[float] = None,
+        simulation_method: Optional[str] = None
     ):
-        """Atualiza histograma com autosize responsivo."""
-        import numpy as np
+        """
+        Atualiza histograma usando plotly.graph_objects.
         
-        if not final_balances:
+        Mantém todas as correções anteriores:
+        - Verificação correta para arrays vazios
+        - Bins dinâmicos (Regra de Sturges)
+        - Verificação meta > 0
+        - Linhas P5, P50, P95
+        - Título dinâmico com método
+        """
+        # Verificação para arrays/listas
+        if final_balances is None:
             self._show_empty()
             return
         
-        # Calcular histograma
-        hist, bins = np.histogram(final_balances, bins=30)
-        bin_centers = [(bins[i] + bins[i+1]) / 2 for i in range(len(bins)-1)]
+        # Converter para array numpy se necessário
+        if isinstance(final_balances, list):
+            final_balances = np.array(final_balances)
+        
+        # Verificar se tem dados
+        if len(final_balances) == 0:
+            self._show_empty()
+            return
+        
+        # Verificar se tem variância (não é array de valores iguais)
+        if len(final_balances) == 1 or np.std(final_balances) < 1:
+            self._show_deterministic_message(float(final_balances[0]))
+            return
+        
+        # Bins dinâmicos (Regra de Sturges)
+        n = len(final_balances)
+        n_bins = min(max(int(np.ceil(np.log2(n) + 1)), 10), 50)
         
         # Converter para milhões para melhor visualização
-        bin_centers_m = [b / 1_000_000 for b in bin_centers]
-        meta_m = meta / 1_000_000
-        p50_m = stats.p50 / 1_000_000
+        final_balances_m = final_balances / 1_000_000
         p5_m = stats.p5 / 1_000_000
+        p50_m = stats.p50 / 1_000_000
+        p95_m = stats.p95 / 1_000_000
         det_m = deterministic / 1_000_000 if deterministic else None
+        meta_m = meta / 1_000_000 if meta and meta > 0 else None
         
-        # Construir shapes
-        shapes_list = [
-            f"""{{ type: 'line', x0: {meta_m}, x1: {meta_m}, y0: 0, y1: 1, yref: 'paper',
-                line: {{ color: '#F59E0B', width: 3 }} }}""",
-            f"""{{ type: 'line', x0: {p50_m}, x1: {p50_m}, y0: 0, y1: 1, yref: 'paper',
-                line: {{ color: '#EF4444', width: 2, dash: 'dash' }} }}""",
-            f"""{{ type: 'line', x0: {p5_m}, x1: {p5_m}, y0: 0, y1: 1, yref: 'paper',
-                line: {{ color: '#DC2626', width: 2, dash: 'dot' }} }}"""
-        ]
+        # Título dinâmico com método de simulação
+        method_labels = {
+            'bootstrap': '(Bootstrap Histórico)',
+            'normal': '(Distribuição Normal)',
+            't_student': '(t-Student)',
+            'parameter_range': '(Monte Carlo)'
+        }
+        method_suffix = method_labels.get(simulation_method, '')
+        chart_title = f'Distribuição dos Saldos Finais {method_suffix}'.strip()
         
-        if det_m:
-            shapes_list.append(
-                f"""{{ type: 'line', x0: {det_m}, x1: {det_m}, y0: 0, y1: 1, yref: 'paper',
-                    line: {{ color: '#10B981', width: 2 }} }}"""
+        # Criar figura Plotly
+        fig = go.Figure()
+        
+        # Adicionar histograma
+        fig.add_trace(go.Histogram(
+            x=final_balances_m,
+            nbinsx=n_bins,
+            marker_color='rgba(59, 130, 246, 0.7)',
+            marker_line_color='rgba(59, 130, 246, 1)',
+            marker_line_width=1,
+            hovertemplate='Faixa: R$ %{x:.2f}M<br>Frequência: %{y}<extra></extra>',
+            name='Distribuição'
+        ))
+        
+        # Adicionar linha P5 (Pessimista) - Vermelho
+        fig.add_vline(
+            x=p5_m,
+            line_dash="dot",
+            line_color="#DC2626",
+            line_width=2,
+            annotation_text="P5",
+            annotation_position="top",
+            annotation_font_color="#DC2626",
+            annotation_font_size=11
+        )
+        
+        # Adicionar linha P50 (Mediana) - Azul
+        fig.add_vline(
+            x=p50_m,
+            line_dash="dash",
+            line_color="#3B82F6",
+            line_width=2,
+            annotation_text="P50 (Mediana)",
+            annotation_position="top",
+            annotation_font_color="#3B82F6",
+            annotation_font_size=11
+        )
+        
+        # Adicionar linha P95 (Otimista) - Verde
+        fig.add_vline(
+            x=p95_m,
+            line_dash="dot",
+            line_color="#10B981",
+            line_width=2,
+            annotation_text="P95",
+            annotation_position="top",
+            annotation_font_color="#10B981",
+            annotation_font_size=11
+        )
+        
+        # Adicionar linha Meta (se > 0) - Laranja
+        if meta_m:
+            fig.add_vline(
+                x=meta_m,
+                line_color="#F59E0B",
+                line_width=3,
+                annotation_text="🎯 Meta",
+                annotation_position="top",
+                annotation_font_color="#F59E0B",
+                annotation_font_size=11
             )
         
-        shapes = ','.join(shapes_list)
-        
-        # Construir annotations
-        annot_list = [
-            f"""{{ x: {meta_m}, y: 1, yref: 'paper', text: 'Meta', showarrow: false,
-                font: {{ color: '#F59E0B', size: 11 }}, yanchor: 'bottom' }}""",
-            f"""{{ x: {p50_m}, y: 0.92, yref: 'paper', text: 'Mediana', showarrow: false,
-                font: {{ color: '#EF4444', size: 11 }}, yanchor: 'bottom' }}""",
-            f"""{{ x: {p5_m}, y: 0.84, yref: 'paper', text: 'P5', showarrow: false,
-                font: {{ color: '#DC2626', size: 11 }}, yanchor: 'bottom' }}"""
-        ]
-        
+        # Adicionar linha Determinístico (se disponível) - Roxo
         if det_m:
-            annot_list.append(
-                f"""{{ x: {det_m}, y: 0.76, yref: 'paper', text: 'Det.', showarrow: false,
-                    font: {{ color: '#10B981', size: 11 }}, yanchor: 'bottom' }}"""
+            fig.add_vline(
+                x=det_m,
+                line_color="#7C3AED",
+                line_width=2,
+                annotation_text="Det.",
+                annotation_position="bottom",
+                annotation_font_color="#7C3AED",
+                annotation_font_size=11
             )
         
-        annotations = ','.join(annot_list)
+        # Configurar layout
+        fig.update_layout(
+            title=dict(
+                text=chart_title,
+                font=dict(size=14)
+            ),
+            xaxis=dict(
+                title='Saldo Final (R$ Milhões)',
+                gridcolor='#E5E7EB'
+            ),
+            yaxis=dict(
+                title='Frequência',
+                gridcolor='#E5E7EB'
+            ),
+            margin=dict(l=60, r=30, t=80, b=50),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            showlegend=False,
+            bargap=0.05
+        )
         
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-            <style>
-                body {{ margin: 0; padding: 0; }}
-                #chart {{ width: 100%; height: 100%; min-height: 350px; }}
-            </style>
-        </head>
-        <body>
-            <div id="chart"></div>
-            <script>
-                var data = [{{
-                    x: {bin_centers_m},
-                    y: {list(hist)},
-                    type: 'bar',
-                    marker: {{
-                        color: 'rgba(59, 130, 246, 0.7)',
-                        line: {{ color: 'rgba(59, 130, 246, 1)', width: 1 }}
-                    }},
-                    hovertemplate: 'Faixa: R$ %{{x:.2f}}M<br>Frequência: %{{y}}<extra></extra>'
-                }}];
-                
-                var layout = {{
-                    title: {{ text: 'Distribuição dos Saldos Finais', font: {{ size: 14 }} }},
-                    xaxis: {{ title: 'Saldo Final (R$ Milhões)', gridcolor: '#E5E7EB' }},
-                    yaxis: {{ title: 'Frequência', gridcolor: '#E5E7EB' }},
-                    shapes: [{shapes}],
-                    annotations: [{annotations}],
-                    margin: {{ l: 60, r: 30, t: 50, b: 50 }},
-                    paper_bgcolor: 'white',
-                    plot_bgcolor: 'white',
-                    autosize: true
-                }};
-                
-                Plotly.newPlot('chart', data, layout, {{ responsive: true, displayModeBar: false }});
-                window.addEventListener('resize', function() {{ Plotly.Plots.resize('chart'); }});
-            </script>
-        </body>
-        </html>
-        """
-        
-        self.chart_view.setHtml(html)
+        # Renderizar usando o método padrão (que funciona)
+        self._render_figure(fig)
+
 
 
 class ProjectionChartExpert(QWidget):

@@ -29,7 +29,6 @@ from core.statistics import (
     PercentileStats, RiskMetrics, ImplicitParameters,
     save_project, load_project,
     calculate_percentiles, extract_implicit_parameters, calculate_risk_metrics,
-    bootstrap_returns, normal_returns, t_student_returns,
     get_risk_free_rate, clear_cdi_cache, get_cdi_info
 )
 from ui.styles_modern import get_modern_style, get_colors, apply_shadow
@@ -1431,7 +1430,12 @@ class ModernMainWindow(QMainWindow):
         qdate = self.input_start_date.date()
         start_date = date(qdate.year(), qdate.month(), qdate.day())
         
-        # Criar input Monte Carlo
+        # Obter retornos históricos em formato de lista de floats (%)
+        historical_returns_list = []
+        if is_expert_mode and has_historical:
+            historical_returns_list = [r.return_rate * 100 for r in self.historical_returns]
+        
+        # Criar input Monte Carlo com todos os campos
         mc_input = MonteCarloInput(
             capital_inicial=capital_range,
             aporte_mensal=aporte_range,
@@ -1440,16 +1444,14 @@ class ModernMainWindow(QMainWindow):
             meta=self._parse_value(self.input_meta.text()),
             n_simulations=self.spin_simulations.value(),
             start_date=start_date,
-            events_manager=self.events_manager if self.events_manager.count > 0 else None
-        )
-        
-        # Armazenar configuração do Modo Expert
-        if is_expert_mode:
-            mc_input.expert_mode = True
-            mc_input.historical_returns = self.historical_returns
-            mc_input.simulation_method = ['bootstrap', 'normal', 't_student'][
+            events_manager=self.events_manager if self.events_manager.count > 0 else None,
+            # Campos do Modo Expert
+            expert_mode=is_expert_mode and has_historical,
+            historical_returns=historical_returns_list,
+            simulation_method=['bootstrap', 'normal', 't_student'][
                 self.combo_method.currentIndex() if hasattr(self, 'combo_method') else 0
-            ]
+            ] if is_expert_mode else 'bootstrap'
+        )
         
         return True, [], mc_input
     
@@ -1522,8 +1524,19 @@ class ModernMainWindow(QMainWindow):
         # Summary Monte Carlo
         if result.has_monte_carlo:
             self.mc_summary.setVisible(True)
+            
+            # Identificar método usado
+            method_labels = {
+                'bootstrap': '🔄 Bootstrap Histórico',
+                'normal': '📊 Distribuição Normal',
+                't_student': '📈 t-Student',
+                'parameter_range': '📐 Ranges de Parâmetros'
+            }
+            method_label = method_labels.get(result.simulation_method, 'Monte Carlo')
+            
             mc_text = (
                 f"<b>{result.n_simulations:,}</b> cenários simulados<br>"
+                f"Método: <b>{method_label}</b><br>"
                 f"Capital Total Investido: <b>{format_currency(result.total_invested)}</b><br>"
                 f"Saldo Final Médio: <b>{format_currency(result.final_balance_mean)}</b><br>"
                 f"Intervalo: {format_currency(result.final_balance_min)} → "
@@ -1556,8 +1569,18 @@ class ModernMainWindow(QMainWindow):
         self._update_advanced_statistics(result)
         
         # Status bar
+        method_info = ""
+        if result.simulation_method:
+            method_names = {
+                'bootstrap': 'Bootstrap',
+                'normal': 'Normal',
+                't_student': 't-Student',
+                'parameter_range': 'Ranges'
+            }
+            method_info = f" | Método: {method_names.get(result.simulation_method, result.simulation_method)}"
+        
         self.status_bar.showMessage(
-            f"✓ Simulação concluída | {result.n_simulations:,} cenários | "
+            f"✓ Simulação concluída | {result.n_simulations:,} cenários{method_info} | "
             f"Saldo final: {format_currency(result.final_balance_det)}"
         )
     
@@ -2058,7 +2081,8 @@ class ModernMainWindow(QMainWindow):
                     list(simulated_balances),
                     self.percentile_stats,
                     meta,
-                    final_year.balance_deterministic
+                    final_year.balance_deterministic,
+                    simulation_method=result.simulation_method  # CORREÇÃO: passar método
                 )
             else:
                 # Modo determinístico: mostrar mensagem informativa

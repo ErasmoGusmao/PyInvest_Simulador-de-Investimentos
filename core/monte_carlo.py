@@ -1,8 +1,10 @@
 """
 PyInvest - Motor de Simulação Monte Carlo
 Implementa análise probabilística vetorizada com NumPy.
+Inclui Modo Expert com Bootstrap, Normal e t-Student.
 """
 
+import math
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
@@ -12,6 +14,112 @@ from datetime import date
 # Import para PercentileStats (evita circular import)
 if TYPE_CHECKING:
     from .statistics import PercentileStats
+
+
+# =============================================================================
+# FUNÇÕES DE GERAÇÃO DE RETORNOS - MODO EXPERT
+# =============================================================================
+
+def bootstrap_returns(
+    historical_returns: List[float],
+    n_years: int,
+    n_simulations: int,
+    seed: Optional[int] = None
+) -> np.ndarray:
+    """
+    Gera retornos via Bootstrap Histórico.
+    Reamostra com reposição os retornos históricos.
+    
+    Args:
+        historical_returns: Lista de retornos anuais históricos (em %)
+        n_years: Número de anos a simular
+        n_simulations: Número de simulações
+        seed: Seed para reprodutibilidade
+        
+    Returns:
+        Array (n_simulations, n_years) de retornos anuais em %
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    returns = np.array(historical_returns)
+    
+    # Reamostrar com reposição
+    simulated_returns = np.random.choice(
+        returns, 
+        size=(n_simulations, n_years),
+        replace=True
+    )
+    
+    return simulated_returns
+
+
+def normal_returns(
+    mean_return: float,
+    std_return: float,
+    n_years: int,
+    n_simulations: int,
+    seed: Optional[int] = None
+) -> np.ndarray:
+    """
+    Gera retornos via Distribuição Normal (Gaussiana).
+    
+    Args:
+        mean_return: Retorno médio anual (em %)
+        std_return: Desvio padrão dos retornos (em %)
+        n_years: Número de anos
+        n_simulations: Número de simulações
+        seed: Seed para reprodutibilidade
+        
+    Returns:
+        Array (n_simulations, n_years) de retornos anuais em %
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    return np.random.normal(mean_return, std_return, (n_simulations, n_years))
+
+
+def t_student_returns(
+    mean_return: float,
+    std_return: float,
+    n_years: int,
+    n_simulations: int,
+    df: int = 5,
+    seed: Optional[int] = None
+) -> np.ndarray:
+    """
+    Gera retornos via Distribuição t-Student.
+    Captura caudas gordas (eventos extremos mais frequentes).
+    
+    Args:
+        mean_return: Retorno médio anual (em %)
+        std_return: Desvio padrão dos retornos (em %)
+        n_years: Número de anos
+        n_simulations: Número de simulações
+        df: Graus de liberdade (menor = caudas mais gordas)
+        seed: Seed para reprodutibilidade
+        
+    Returns:
+        Array (n_simulations, n_years) de retornos anuais em %
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # t-Student padronizada, depois escalar
+    t_samples = np.random.standard_t(df, (n_simulations, n_years))
+    
+    # Escalar para média e desvio desejados
+    # Ajustar variância: Var(t) = df/(df-2) para df > 2
+    scale_factor = std_return * math.sqrt((df - 2) / df) if df > 2 else std_return
+    
+    result = mean_return + scale_factor * t_samples
+    
+    # Limitar valores extremos para evitar problemas numéricos
+    # Retorno mínimo -90% (perda quase total) e máximo +200%
+    result = np.clip(result, -90, 200)
+    
+    return result
 
 
 class DistributionType(Enum):
@@ -146,6 +254,11 @@ class MonteCarloInput:
     start_date: date = field(default_factory=date.today)
     events_manager: object = None  # EventsManager (evita import circular)
     
+    # === MODO EXPERT ===
+    expert_mode: bool = False
+    historical_returns: List[float] = field(default_factory=list)  # Retornos anuais em %
+    simulation_method: str = 'bootstrap'  # 'bootstrap', 'normal', 't_student'
+    
     def validate_all(self) -> Tuple[bool, List[str]]:
         """
         Valida todos os parâmetros.
@@ -186,6 +299,10 @@ class MonteCarloInput:
             self.aporte_mensal.is_probabilistic() or
             self.rentabilidade_anual.is_probabilistic()
         )
+    
+    def has_expert_mode(self) -> bool:
+        """Verifica se o Modo Expert está ativado com dados suficientes."""
+        return self.expert_mode and len(self.historical_returns) >= 2
 
 
 @dataclass
@@ -277,6 +394,9 @@ class MonteCarloResult:
     sampled_monthlies: Optional[np.ndarray] = None
     sampled_rates: Optional[np.ndarray] = None
     sampled_final_balances: Optional[np.ndarray] = None
+    
+    # === MODO EXPERT ===
+    simulation_method: Optional[str] = None  # 'bootstrap', 'normal', 't_student', 'parameter_range'
 
 
 class MonteCarloEngine:
@@ -396,8 +516,9 @@ class MonteCarloEngine:
         
         months = np.arange(total_months + 1)
         
-        # Verificar se há parâmetros probabilísticos
+        # Verificar se há parâmetros probabilísticos OU Modo Expert
         has_mc = self.inputs.has_probabilistic_params()
+        has_expert = self.inputs.has_expert_mode()
         
         # Variáveis para armazenar dados Monte Carlo
         sampled_capitals = None
@@ -405,8 +526,79 @@ class MonteCarloEngine:
         sampled_rates = None
         sampled_final_balances = None
         representative_scenarios = []
+        simulation_method_used = None  # Para rastreamento
         
-        if has_mc:
+        # =====================================================================
+        # MODO EXPERT: Simulação com retornos históricos
+        # =====================================================================
+        if has_expert:
+            simulation_method_used = self.inputs.simulation_method
+            n_sim = self.inputs.n_simulations
+            
+            # Gerar retornos anuais baseado no método escolhido
+            historical = self.inputs.historical_returns
+            mean_ret = float(np.mean(historical))
+            std_ret = float(np.std(historical))
+            
+            if self.inputs.simulation_method == 'bootstrap':
+                annual_returns = bootstrap_returns(historical, years, n_sim)
+            elif self.inputs.simulation_method == 'normal':
+                annual_returns = normal_returns(mean_ret, std_ret, years, n_sim)
+            elif self.inputs.simulation_method == 't_student':
+                annual_returns = t_student_returns(mean_ret, std_ret, years, n_sim)
+            else:
+                # Fallback para bootstrap
+                annual_returns = bootstrap_returns(historical, years, n_sim)
+            
+            # Executar simulação com retornos anuais variáveis
+            all_balances, sampled_capitals, sampled_monthlies, sampled_rates = \
+                self._calculate_expert_mode(annual_returns, monthly_events)
+            
+            # Saldos finais para análise
+            sampled_final_balances = all_balances[:, -1]
+            
+            # Calcular estatísticas
+            balances_mean = np.mean(all_balances, axis=0)
+            balances_median = np.median(all_balances, axis=0)
+            balances_min = np.min(all_balances, axis=0)
+            balances_max = np.max(all_balances, axis=0)
+            balances_p10 = np.percentile(all_balances, 10, axis=0)
+            balances_p90 = np.percentile(all_balances, 90, axis=0)
+            
+            # IC 90% (Percentis 5 e 95)
+            balances_p5 = np.percentile(all_balances, 5, axis=0)
+            balances_p95 = np.percentile(all_balances, 95, axis=0)
+            
+            # Moda aproximada
+            balances_mode = np.zeros(all_balances.shape[1])
+            for i in range(all_balances.shape[1]):
+                hist, bin_edges = np.histogram(all_balances[:, i], bins=50)
+                mode_idx = np.argmax(hist)
+                balances_mode[i] = (bin_edges[mode_idx] + bin_edges[mode_idx + 1]) / 2
+            
+            final_balance_mean = balances_mean[-1]
+            final_balance_min = balances_min[-1]
+            final_balance_max = balances_max[-1]
+            
+            # Calcular PercentileStats
+            from .statistics import calculate_percentiles
+            percentile_stats = calculate_percentiles(sampled_final_balances)
+            
+            # Extrair cenários representativos
+            representative_scenarios = extract_representative_scenarios(
+                sampled_final_balances,
+                sampled_capitals,
+                sampled_monthlies,
+                sampled_rates,
+                percentile_stats
+            )
+            calculated_percentile_stats = percentile_stats
+        
+        # =====================================================================
+        # MODO PADRÃO: Monte Carlo com ranges de parâmetros
+        # =====================================================================
+        elif has_mc:
+            simulation_method_used = 'parameter_range'
             # Executar Monte Carlo COM eventos - agora retorna também os parâmetros
             all_balances, sampled_capitals, sampled_monthlies, sampled_rates = \
                 self._calculate_monte_carlo_with_events(monthly_events)
@@ -530,7 +722,7 @@ class MonteCarloEngine:
             final_balance_max=final_balance_max,
             yearly_projection=yearly_projection,
             n_simulations=self.inputs.n_simulations,
-            has_monte_carlo=has_mc,
+            has_monte_carlo=has_mc or has_expert,  # Modo Expert também é Monte Carlo
             params_used=params_used,
             yearly_events=yearly_events,
             insolvency_month=insolvency_month,
@@ -542,7 +734,9 @@ class MonteCarloEngine:
             sampled_capitals=sampled_capitals,
             sampled_monthlies=sampled_monthlies,
             sampled_rates=sampled_rates,
-            sampled_final_balances=sampled_final_balances
+            sampled_final_balances=sampled_final_balances,
+            # Rastreamento do método usado
+            simulation_method=simulation_method_used
         )
     
     def _calculate_with_events(
@@ -595,6 +789,73 @@ class MonteCarloEngine:
                     insolvency_month = m
         
         return balances, insolvency_month
+    
+    def _calculate_expert_mode(
+        self,
+        annual_returns: np.ndarray,
+        monthly_events: Dict[int, Tuple[float, float]]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Executa simulação com retornos anuais gerados pelo Modo Expert.
+        
+        A diferença do Monte Carlo padrão é que cada ano tem uma taxa diferente
+        (amostrada do histórico), em vez de uma taxa fixa por simulação.
+        
+        Args:
+            annual_returns: Matriz (n_sim, n_years) com retornos anuais em %
+            monthly_events: Dicionário de eventos {mês: (depósito, resgate)}
+            
+        Returns:
+            Tuple contendo:
+            - all_balances: Matriz (n_sim x meses) com saldos
+            - initials: Array com capitais iniciais amostrados
+            - monthlies: Array com aportes mensais amostrados
+            - effective_rates: Array com taxas médias efetivas por simulação
+        """
+        n_sim = annual_returns.shape[0]
+        years = annual_returns.shape[1]
+        total_months = years * 12
+        
+        # Gerar parâmetros para capital e aporte (podem ter range ou ser fixos)
+        initials = self.inputs.capital_inicial.sample(n_sim)
+        monthlies = self.inputs.aporte_mensal.sample(n_sim)
+        
+        # Matriz de saldos
+        all_balances = np.zeros((n_sim, total_months + 1))
+        all_balances[:, 0] = initials
+        
+        # Para cada ano, aplicar a taxa correspondente
+        for year in range(years):
+            # Taxa anual deste ano para cada simulação
+            annual_rate = annual_returns[:, year]  # Shape: (n_sim,)
+            
+            # Converter para taxa mensal
+            monthly_rate = (1 + annual_rate / 100) ** (1/12) - 1  # Shape: (n_sim,)
+            
+            # Simular os 12 meses deste ano
+            for month in range(12):
+                m = year * 12 + month + 1  # Índice global do mês
+                
+                # Juros
+                all_balances[:, m] = all_balances[:, m-1] * (1 + monthly_rate)
+                
+                # Aporte mensal
+                all_balances[:, m] += monthlies
+                
+                # Eventos do mês (fixos para todos os cenários)
+                if m in monthly_events:
+                    deposits, withdrawals = monthly_events[m]
+                    all_balances[:, m] += deposits
+                    all_balances[:, m] -= withdrawals
+                
+                # Garantir não negativo
+                all_balances[:, m] = np.maximum(0, all_balances[:, m])
+        
+        # Calcular taxa média efetiva para cada simulação (para compatibilidade)
+        # Média geométrica dos retornos anuais
+        effective_rates = np.mean(annual_returns, axis=1)  # Média aritmética simplificada
+        
+        return all_balances, initials, monthlies, effective_rates
     
     def _calculate_monte_carlo_with_events(
         self,
