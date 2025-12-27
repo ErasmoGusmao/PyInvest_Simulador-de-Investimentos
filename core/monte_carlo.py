@@ -557,19 +557,26 @@ class MonteCarloEngine:
             # Saldos finais para análise
             sampled_final_balances = all_balances[:, -1]
             
-            # Calcular estatísticas
-            balances_mean = np.mean(all_balances, axis=0)
-            balances_median = np.median(all_balances, axis=0)
-            balances_min = np.min(all_balances, axis=0)
-            balances_max = np.max(all_balances, axis=0)
-            balances_p10 = np.percentile(all_balances, 10, axis=0)
-            balances_p90 = np.percentile(all_balances, 90, axis=0)
+            # =====================================================================
+            # CORREÇÃO: Agregar trajetórias por saldo final (não por mês)
+            # Cada percentil agora representa uma simulação REAL com parâmetros
+            # consistentes ao longo do tempo.
+            # =====================================================================
+            aggregated = self._aggregate_trajectories(
+                all_balances, sampled_capitals, sampled_monthlies, sampled_rates
+            )
             
-            # IC 90% (Percentis 5 e 95)
-            balances_p5 = np.percentile(all_balances, 5, axis=0)
-            balances_p95 = np.percentile(all_balances, 95, axis=0)
+            # Extrair trajetórias corrigidas
+            balances_min = aggregated['trajectories']['min']
+            balances_max = aggregated['trajectories']['max']
+            balances_p5 = aggregated['trajectories']['p5']
+            balances_p10 = aggregated['trajectories']['p10']
+            balances_p90 = aggregated['trajectories']['p90']
+            balances_p95 = aggregated['trajectories']['p95']
+            balances_mean = aggregated['trajectories']['mean']
+            balances_median = aggregated['trajectories']['p50']  # Mediana real
             
-            # Moda aproximada
+            # Moda aproximada (mantém cálculo por mês, pois moda é diferente)
             balances_mode = np.zeros(all_balances.shape[1])
             for i in range(all_balances.shape[1]):
                 hist, bin_edges = np.histogram(all_balances[:, i], bins=50)
@@ -606,19 +613,26 @@ class MonteCarloEngine:
             # Saldos finais para análise
             sampled_final_balances = all_balances[:, -1]
             
-            # Calcular estatísticas
-            balances_mean = np.mean(all_balances, axis=0)
-            balances_median = np.median(all_balances, axis=0)
-            balances_min = np.min(all_balances, axis=0)
-            balances_max = np.max(all_balances, axis=0)
-            balances_p10 = np.percentile(all_balances, 10, axis=0)
-            balances_p90 = np.percentile(all_balances, 90, axis=0)
+            # =====================================================================
+            # CORREÇÃO: Agregar trajetórias por saldo final (não por mês)
+            # Cada percentil agora representa uma simulação REAL com parâmetros
+            # consistentes ao longo do tempo.
+            # =====================================================================
+            aggregated = self._aggregate_trajectories(
+                all_balances, sampled_capitals, sampled_monthlies, sampled_rates
+            )
             
-            # IC 90% (Percentis 5 e 95)
-            balances_p5 = np.percentile(all_balances, 5, axis=0)
-            balances_p95 = np.percentile(all_balances, 95, axis=0)
+            # Extrair trajetórias corrigidas
+            balances_min = aggregated['trajectories']['min']
+            balances_max = aggregated['trajectories']['max']
+            balances_p5 = aggregated['trajectories']['p5']
+            balances_p10 = aggregated['trajectories']['p10']
+            balances_p90 = aggregated['trajectories']['p90']
+            balances_p95 = aggregated['trajectories']['p95']
+            balances_mean = aggregated['trajectories']['mean']
+            balances_median = aggregated['trajectories']['p50']  # Mediana real
             
-            # Moda aproximada (usando histograma para cada mês)
+            # Moda aproximada (mantém cálculo por mês, pois moda é diferente)
             balances_mode = np.zeros(all_balances.shape[1])
             for i in range(all_balances.shape[1]):
                 hist, bin_edges = np.histogram(all_balances[:, i], bins=50)
@@ -906,6 +920,90 @@ class MonteCarloEngine:
             all_balances[:, m] = np.maximum(0, all_balances[:, m])
         
         return all_balances, initials, monthlies, rates
+
+    def _aggregate_trajectories(
+        self,
+        all_balances: np.ndarray,
+        sampled_capitals: np.ndarray,
+        sampled_monthlies: np.ndarray,
+        sampled_rates: np.ndarray
+    ) -> dict:
+        """
+        Agrega trajetórias ordenando pelo saldo FINAL.
+        
+        CORREÇÃO CRÍTICA: Cada percentil representa uma simulação REAL com 
+        parâmetros consistentes (taxa fixa ao longo do tempo), em vez de um 
+        "Frankenstein" de simulações diferentes para cada mês.
+        
+        Args:
+            all_balances: Matriz (n_sim x meses) com todos os saldos
+            sampled_capitals: Array com capitais iniciais amostrados
+            sampled_monthlies: Array com aportes mensais amostrados
+            sampled_rates: Array com taxas anuais amostradas
+            
+        Returns:
+            Dict com trajetórias completas para cada percentil e índices das simulações
+        """
+        n_sim = all_balances.shape[0]
+        final_balances = all_balances[:, -1]
+        
+        # Ordenar índices pelo saldo final
+        sorted_indices = np.argsort(final_balances)
+        
+        def get_percentile_index(percentile: float) -> int:
+            """Retorna o índice da simulação no percentil especificado."""
+            return sorted_indices[int(n_sim * percentile / 100)]
+        
+        def get_trajectory(percentile: float) -> np.ndarray:
+            """Retorna a trajetória completa da simulação no percentil."""
+            idx = get_percentile_index(percentile)
+            return all_balances[idx, :].copy()
+        
+        # Índices das simulações representativas
+        indices = {
+            'min': sorted_indices[0],
+            'p5': get_percentile_index(5),
+            'p10': get_percentile_index(10),
+            'p25': get_percentile_index(25),
+            'p50': get_percentile_index(50),
+            'p75': get_percentile_index(75),
+            'p90': get_percentile_index(90),
+            'p95': get_percentile_index(95),
+            'max': sorted_indices[-1]
+        }
+        
+        # Trajetórias completas de simulações REAIS
+        trajectories = {
+            'min': all_balances[indices['min'], :].copy(),
+            'p5': get_trajectory(5),
+            'p10': get_trajectory(10),
+            'p25': get_trajectory(25),
+            'p50': get_trajectory(50),  # Mediana real
+            'p75': get_trajectory(75),
+            'p90': get_trajectory(90),
+            'p95': get_trajectory(95),
+            'max': all_balances[indices['max'], :].copy(),
+            
+            # Média continua sendo média de todas (correto matematicamente)
+            # A média é uma estatística de tendência central, não uma trajetória real
+            'mean': np.mean(all_balances, axis=0)
+        }
+        
+        # Parâmetros de cada simulação representativa (para exibição na UI)
+        params = {}
+        for key, idx in indices.items():
+            params[key] = {
+                'capital': float(sampled_capitals[idx]),
+                'aporte_mensal': float(sampled_monthlies[idx]),
+                'taxa_anual': float(sampled_rates[idx]),
+                'saldo_final': float(all_balances[idx, -1])
+            }
+        
+        return {
+            'trajectories': trajectories,
+            'indices': indices,
+            'params': params
+        }
 
 
 def extract_representative_scenarios(
