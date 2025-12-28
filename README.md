@@ -2,6 +2,150 @@
 
 ---
 
+## 🚀 Novidades v6.0 (Bootstrap Mensal → Cenários Anuais Sintéticos)
+
+### 🎯 Problema Resolvido
+- Anteriormente, o Modo Expert usava apenas **9 amostras anuais** (2017-2025)
+- Espaço amostral muito pequeno para estatísticas confiáveis
+- Agora: **108 retornos mensais** → **até 100.000 cenários anuais sintéticos**
+
+### 📊 Novo Módulo: `core/bootstrap.py`
+
+```python
+from core.bootstrap import BootstrapEngine, MonthlyReturnData
+
+# Carregar dados mensais
+data = MonthlyReturnData(periods=['Jan/2017', ...], returns=np.array([...]))
+
+# Criar engine e diagnosticar autocorrelação
+engine = BootstrapEngine(data)
+diagnosis = engine.get_acf_diagnosis()
+print(f"ACF(1): {diagnosis['acf_lag1']:.4f}")
+print(f"Sugestão: {diagnosis['recommendation']}")
+
+# Gerar cenários
+result = engine.generate_simple_bootstrap(n_scenarios=10000, seed=42)
+# ou
+result = engine.generate_block_bootstrap(n_scenarios=10000, block_size=3, seed=42)
+
+print(f"Média: {result.mean:.2f}%")
+print(f"P5/P95: {result.p5:.2f}% / {result.p95:.2f}%")
+```
+
+### 🔧 Funcionalidades Implementadas (Fase 1 - Core)
+
+| Funcionalidade | Descrição |
+|----------------|-----------|
+| **Bootstrap Histórico** | Sorteia 12 meses com reposição (I.I.D.) |
+| **Block Bootstrap** | Preserva autocorrelação temporal |
+| **Cálculo de ACF** | Detecta autocorrelação e sugere método |
+| **Tamanho de Bloco Automático** | Baseado em ACF(1) |
+| **Importação CSV** | Parse de dados mensais |
+| **Exportação CSV** | Com metadados completos |
+| **Template CSV** | Modelo para preenchimento |
+| **100k Cenários** | Suporte a até 100.000 cenários |
+
+### 📈 Composição de Retornos
+
+```
+R_anual = (1 + r₁) × (1 + r₂) × ... × (1 + r₁₂) - 1
+
+Exemplo: 12 meses de 1% cada
+R_anual = (1.01)^12 - 1 ≈ 12.68% (não 12%!)
+```
+
+### 🧪 Testes Unitários
+
+```bash
+python tests/test_bootstrap.py
+
+# Resultado: 24 testes ✅
+```
+
+---
+
+## 🚀 Novidades v5.3 (Correção Agregação de Trajetórias Monte Carlo)
+
+### 🔧 Correção Crítica: Trajetórias de Percentis
+
+**Problema corrigido**: Os percentis (P5, P10, P90, P95) e extremos (Min, Max) eram calculados **por mês independentemente**, criando "cenários Frankenstein" que não representavam nenhuma simulação real.
+
+**Sintoma**: No modo normal, as taxas implícitas variavam ao longo dos anos quando deveriam ser constantes.
+
+```
+ANTES (Bug):
+   P5 Ano 1: 15.95%  ← Simulação #4523
+   P5 Ano 2: 15.56%  ← Simulação #8901 (DIFERENTE!)
+   P5 Ano 3: 15.20%  ← Simulação #2156 (DIFERENTE!)
+   
+DEPOIS (Correto):
+   P5 Ano 1: 10.55%  ← Simulação #2671
+   P5 Ano 2: 10.55%  ← Simulação #2671 (MESMA!)
+   P5 Ano 3: 10.55%  ← Simulação #2671 (MESMA!)
+```
+
+### 📊 Novo Método: `_aggregate_trajectories()`
+
+```python
+# ANTES: percentil por mês (ERRADO)
+balances_p5 = np.percentile(all_balances, 5, axis=0)
+
+# DEPOIS: trajetória completa de UMA simulação (CORRETO)
+sorted_indices = np.argsort(all_balances[:, -1])  # Ordena por saldo final
+idx_p5 = sorted_indices[int(n_sim * 0.05)]
+balances_p5 = all_balances[idx_p5, :]  # Trajetória completa!
+```
+
+### ✅ Componentes Corrigidos
+
+| Componente | Status |
+|------------|--------|
+| Gráfico Evolução Patrimonial (bandas P5/P95/Min/Max) | ✅ Corrigido |
+| Tabela Projeção Anual | ✅ Corrigido |
+| Cards Min/Max | ✅ Corrigido |
+| Histograma | ✅ Já estava correto |
+| Estatísticas Percentis | ✅ Já estava correto |
+
+### 📝 Nota sobre Modo Expert (Bootstrap)
+
+No **Modo Expert com Bootstrap**, as taxas continuam variando ano-a-ano - **isso é comportamento correto!** O Bootstrap sorteia uma taxa do histórico **para cada ano**, simulando a volatilidade real do mercado.
+
+| Modo | Taxa ao Longo do Tempo | Status |
+|------|------------------------|--------|
+| Normal (Monte Carlo) | CONSTANTE | ✅ Corrigido na v5.3 |
+| Expert (Bootstrap) | VARIÁVEL | ✅ Comportamento esperado |
+
+---
+
+## 🚀 Novidades v5.2 (Correção Histograma Plotly)
+
+### 🔧 Correção: Histograma não renderizava
+- **Problema**: O histograma na aba "Distribuição" mostrava apenas a legenda HTML, sem o gráfico Plotly.
+- **Causa**: Carregamento manual do Plotly.js via CDN não funcionava no QWebEngineView.
+- **Solução**: Reescrito usando `plotly.graph_objects` com `fig.to_html(include_plotlyjs='cdn')`.
+
+### 📊 Melhorias no Histograma
+- Bins dinâmicos (Regra de Sturges)
+- Linhas verticais P5/P50/P95
+- Validação de metadados
+- Labels de método no Modo Expert
+
+---
+
+## 🚀 Novidades v5.1 (Modo Expert + Estatísticas Avançadas)
+
+### 🧪 Modo Expert
+- **Bootstrap Histórico**: Sorteia retornos reais do passado
+- **Distribuição Normal**: Assume retornos normalmente distribuídos
+- **Distribuição t-Student**: Captura caudas pesadas (eventos extremos)
+
+### 📊 Estatísticas Avançadas
+- Upload de arquivo CSV com rendimentos históricos
+- Média, desvio padrão, assimetria (skewness), curtose
+- VaR e CVaR calculados corretamente
+
+---
+
 ## 🚀 Novidades v4.8 (Correção Capital Total Investido)
 
 ### 🔧 Correção Crítica: Capital Total Investido
@@ -41,16 +185,11 @@
 - **Volatilidade:** desvio padrão dos saldos finais.
 - **Sharpe Ratio:** retorno excedente ao CDI por unidade de risco.
 
-### 🛡️ Robustez e Integração
-- Correção de bugs no acesso ao dicionário do CDI.
-- Painel de resumo e histograma totalmente integrados às novas métricas.
-- Testes completos no ambiente virtual.
-
 ---
 
 ## 📈 Métricas de Risco (Monte Carlo)
 
-O painel de análise de risco exibe **8 cartões** com as principais métricas estatísticas, cada uma com tooltip explicativo e fórmula matemática:
+O painel de análise de risco exibe **8 cartões** com as principais métricas estatísticas:
 
 | Card         | Descrição | Fórmula/Tooltip |
 |--------------|-----------|-----------------|
@@ -63,122 +202,7 @@ O painel de análise de risco exibe **8 cartões** com as principais métricas e
 | 📈 Sharpe Ratio  | Retorno excedente ao CDI por unidade de risco | Sharpe = (CAGR − CDI) ÷ Volatilidade |
 | 🏦 Taxa CDI      | Taxa livre de risco utilizada | Fonte: B3 (via API do Banco Central) |
 
-> **Fonte do CDI:** A taxa é obtida automaticamente da B3 (via API do Banco Central, Série 12), anualizada corretamente. Se não houver conexão, o usuário pode digitar manualmente.
-
 ---
-
-Uma aplicação desktop moderna para simulação de investimentos com juros compostos e **análise probabilística Monte Carlo**, desenvolvida em Python com interface gráfica profissional e gráficos interativos Plotly.
-
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)
-![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Monte Carlo](https://img.shields.io/badge/Monte_Carlo-50000_cenários-orange.svg)
-
-## ✨ Novidades v4.6 (Redimensionamento Manual + Controle Total)
-
-### 🖱️ Redimensionamento Manual das Colunas
-- **Ambas as tabelas** ("Projeção Anual" e "Cenários Reproduzíveis") agora permitem redimensionamento manual com o mouse
-- Modo `QHeaderView.Interactive` habilitado globalmente
-- Largura mínima de **100px** para proteção contra compressão de valores monetários
-
-### 🎯 Ajuste Inicial Automático
-- `resizeColumnsToContents()` executado ao carregar dados
-- Corrige problema de corte em títulos como "PERCENTIL"
-- Larguras mínimas garantidas após o ajuste automático
-
-### 📊 Comportamento por Quantidade de Colunas
-| Colunas | Scroll Horizontal | Stretch Last | Comportamento |
-|---------|-------------------|--------------|---------------|
-| 5 | Desabilitado | Sim | Preenche tela |
-| 10 | Habilitado | Sim | Preenche + manual |
-| 12 | Obrigatório | Não | Scroll + manual |
-
----
-
-## ✨ Novidades v4.5 (Tabela Responsiva + Alinhamento Centralizado)
-
-### 📊 Lógica Híbrida de Colunas (10 vs 12)
-- **10 colunas (sem eventos)**: Modo `Stretch` - tabela preenche 100% da largura disponível
-- **12 colunas (com eventos)**: Modo `Interactive` + scroll horizontal
-  - `resizeColumnsToContents()` para ajuste automático
-  - Largura mínima de 100px para evitar compressão de valores monetários
-  - Barra de scroll horizontal habilitada (`ScrollBarAsNeeded`)
-
-### 🎯 Alinhamento Centralizado Total
-- **Cabeçalhos**: `horizontalHeader().setDefaultAlignment(Qt.AlignCenter)`
-- **Células**: Todos os `QTableWidgetItem` com `setTextAlignment(Qt.AlignCenter)`
-- Melhor legibilidade e aparência visual consistente
-
-### 🗑️ Limpeza de Código
-- Removido método `reset_columns()` não utilizado
-
----
-
-## ✨ Novidades v4.4 (Tabela de Projeção Expandida)
-
-### 📊 Novas Colunas na Tabela de Projeção Anual
-A tabela de projeção agora exibe estatísticas mais completas:
-
-| Coluna | Descrição | Cor |
-|--------|-----------|-----|
-| Ano | Período da simulação | Verde (primary) |
-| Total Investido | Capital + Aportes acumulados | — |
-| Saldo (Det.) | Valor determinístico (sem variação) | Verde (destaque) |
-| Média | Média das simulações Monte Carlo | Vermelho |
-| Mediana | Valor central (P50) | Roxo |
-| Moda | Valor mais frequente | Laranja |
-| Mín | Pior cenário absoluto | Cinza |
-| P5 | Percentil 5 (pessimista) | Vermelho escuro |
-| P90 | Percentil 90 (otimista) | Verde |
-| Máx | Melhor cenário absoluto | Azul |
-
----
-
-## ✨ Novidades v4.3 (Correção Formatação pt-BR)
-
-### 🔧 Correção: Duplo Clique em Cenários Reproduzíveis
-- **Problema corrigido**: Ao clicar em um cenário para carregar os parâmetros, os valores agora são formatados corretamente no padrão **pt-BR**
-- **Antes**: Valores eram inseridos com `.` como decimal (formato EN-US), causando leitura incorreta
-- **Agora**: Valores formatados com `.` como milhar e `,` como decimal (1.400.000,00)
-
----
-
-## ✨ Novidades v4.2 (Cenários Reproduzíveis Reais + IC 90%)
-
-### 🎯 Correção Importante: Cenários Representativos
-- **Problema corrigido**: A tabela "Cenários Reproduzíveis" agora mostra os parâmetros **REAIS** usados na simulação Monte Carlo
-- **Antes**: Calculava taxas implícitas com capital/aporte fixos (inconsistente)
-- **Agora**: Identifica as simulações reais que geraram cada percentil (P5, P25, P50, P75, P95)
-- Cada cenário é **100% reproduzível** - use os parâmetros exatos para obter o mesmo resultado
-
-### 📊 Como Funciona
-1. O Monte Carlo executa N simulações (até 50.000)
-2. Cada simulação usa combinação aleatória de (Capital × Aporte × Taxa)
-3. Para cada percentil, encontramos a simulação **mais próxima** daquele valor
-4. Extraímos os parâmetros **reais** daquela simulação específica
-
-### 📉 Intervalo de Confiança Ajustado (IC 90%)
-- **Alteração**: Túnel de confiança agora usa **P5-P95** (antes era P2.5-P97.5)
-- **Por quê?** IC 90% é mais prático para planejamento financeiro
-- **Na prática**: Faixa mais estreita e menos influenciada por outliers extremos
-- **Visualização**: Legenda atualizada para "Intervalo de Confiança 90%"
-
-## ✨ Novidades v3.1 (Modern UI + Plotly)
-
-### 🎨 Interface Moderna (Flat Design)
-- Cards brancos com sombras suaves e bordas arredondadas (16px)
-- Tipografia Segoe UI com hierarquia clara
-- Paleta de cores moderna (Emerald Green #10B981)
-- Inputs com altura confortável (40px) e bordas suaves
-- Botões com hover states e transições
-
-### 📊 Gráficos Plotly Interativos
-- **Hover Individual** (`hovermode='closest'`): tooltip apenas na curva apontada
-- **Túnel de Confiança**: área sombreada Min-Max com `fill='tonexty'`
-- **Linha Determinística**: sólida + marcadores (`mode='lines+markers'`)
-- **Linha Média MC**: tracejada (`dash='dash'`)
-- Renderizado em `QWebEngineView` para máxima interatividade
 
 ## 📋 Funcionalidades
 
@@ -188,7 +212,8 @@ A tabela de projeção agora exibe estatísticas mais completas:
 - ✅ Projeção de tempo para atingir a meta
 - ✅ Cálculo de rentabilidade total
 - ✅ **Análise de Sensibilidade** (derivadas parciais)
-- ✅ **Análise Probabilística Monte Carlo** (novo!)
+- ✅ **Análise Probabilística Monte Carlo** (até 50.000 cenários)
+- ✅ **Modo Expert** (Bootstrap, Normal, t-Student)
 
 ### Interface Moderna
 - ✅ Tema claro profissional (estilo dashboard web)
@@ -200,15 +225,18 @@ A tabela de projeção agora exibe estatísticas mais completas:
 
 ### Visualizações Interativas
 - ✅ Gráfico de evolução patrimonial com marcadores anuais
-- ✅ **Túnel de Confiança** Monte Carlo (área sombreada)
+- ✅ **Túnel de Confiança** Monte Carlo (IC 90%)
+- ✅ **Intervalo Total** (Min-Max)
 - ✅ **Linha Média Probabilística** (tracejada)
 - ✅ **Linha Determinística** (sólida com marcadores)
 - ✅ Gráfico de rosca (donut) da composição do saldo
+- ✅ **Histograma de Distribuição** com P5/P50/P95
 - ✅ Tooltips inteligentes com posicionamento dinâmico
 - ✅ Tabela detalhada de projeção anual expandida
 - ✅ Exportação para CSV
 
 ### Análise Monte Carlo
+
 | Funcionalidade | Descrição |
 |----------------|-----------|
 | 📊 50.000 simulações | Configurável de 100 a 50.000 |
@@ -216,21 +244,9 @@ A tabela de projeção agora exibe estatísticas mais completas:
 | 🎯 Túnel de Confiança | Intervalo P5-P95 (IC 90%) e Min-Max |
 | ⚡ Execução Paralela | QThread para não travar a UI |
 | 🔄 Cenários Reproduzíveis | Parâmetros REAIS de cada percentil |
+| 🧪 Modo Expert | Bootstrap, Normal, t-Student |
 
-### Tabela de Cenários Reproduzíveis (v4.2)
-
-A tabela mostra os parâmetros **exatos** que geraram cada percentil na simulação:
-
-| Cenário | Percentil | Capital Inicial | Aporte Mensal | Rent. Anual | Saldo Final |
-|---------|-----------|-----------------|---------------|-------------|-------------|
-| P5 (Pessimista) | P5 | R$ 1.312.456 | R$ 2.345 | 15,00% | R$ 6.034.846 |
-| P50 (Mediana) | P50 | R$ 1.423.789 | R$ 5.123 | 15,00% | R$ 6.969.179 |
-| P95 (Otimista) | P95 | R$ 1.489.234 | R$ 7.654 | 15,00% | R$ 7.891.234 |
-
-> **Nota**: Os valores de Capital e Aporte agora **variam** conforme o range definido!
-
-git clone <seu-repositorio>
-
+---
 
 ## 🗂️ Estrutura do Projeto
 
@@ -242,13 +258,21 @@ pyinvest/
 │
 ├── core/                    # Lógica de negócio
 │   ├── __init__.py
-│   └── calculation.py       # Cálculos financeiros
+│   ├── calculation.py       # Cálculos financeiros
+│   ├── monte_carlo.py       # Simulação Monte Carlo
+│   └── statistics.py        # Estatísticas e métricas
 │
-└── ui/                      # Interface gráfica
-    ├── __init__.py
-    ├── window.py            # Janela principal
-    ├── widgets.py           # Componentes reutilizáveis
-    └── styles.py            # Tema e estilos QSS
+├── ui/                      # Interface gráfica
+│   ├── __init__.py
+│   ├── window_modern.py     # Janela principal moderna
+│   ├── widgets.py           # Componentes reutilizáveis
+│   ├── advanced_widgets.py  # Widgets avançados (histograma, etc)
+│   ├── plotly_charts.py     # Gráficos Plotly
+│   └── styles.py            # Tema e estilos QSS
+│
+└── tests/                   # Testes automatizados
+    ├── test_monte_carlo.py
+    └── test_expert_mode.py
 ```
 
 ## 🚀 Instalação
@@ -290,15 +314,26 @@ python main.py
 ## 🎨 Interface
 
 ### Painel de Parâmetros
+
 | Campo | Descrição |
 |-------|-----------|
-| Capital Inicial | Valor que você já possui para investir |
-| Aporte Mensal | Quanto pretende investir todo mês |
-| Rentabilidade Anual | Taxa de juros esperada (% a.a.) |
+| Capital Inicial | Valor que você já possui para investir (Mín/Base/Máx) |
+| Aporte Mensal | Quanto pretende investir todo mês (Mín/Base/Máx) |
+| Rentabilidade Anual | Taxa de juros esperada (% a.a.) (Mín/Base/Máx) |
 | Objetivo (Meta) | Valor que deseja alcançar |
 | Período | Tempo do investimento em anos |
 
+### Configuração Monte Carlo
+
+| Campo | Descrição |
+|-------|-----------|
+| Número de Simulações | 100 a 50.000 (padrão: 10.000) |
+| Modo Expert | Habilita métodos avançados |
+| Método de Simulação | Bootstrap, Normal ou t-Student |
+| Dados de Rendimento | Upload de CSV com histórico |
+
 ### Cards de Resultado
+
 | Card | Cor | Descrição |
 |------|-----|-----------|
 | Total Investido | Cinza escuro | Soma de todos os aportes |
@@ -307,22 +342,19 @@ python main.py
 | Status da Meta | Laranja | Se a meta foi atingida e % alcançado |
 
 ### Gráficos Interativos
+
 - **Evolução do Patrimônio**: 
-  - Linha sólida: Saldo Total
-  - Linha tracejada: Capital Investido
-  - Tooltip ao passar o mouse mostrando valores
+  - Área clara: Intervalo Total (Min-Max)
+  - Área escura: Intervalo de Confiança 90% (P5-P95)
+  - Linha tracejada: Média Monte Carlo
+  - Linha sólida com marcadores: Cenário Determinístico
+  
 - **Composição do Saldo**: 
   - Gráfico de rosca mostrando proporção Capital vs Juros
-  - Tooltip com valores ao passar o mouse
-
-### Tabela de Projeção
-Mostra ano a ano:
-- Aportes acumulados
-- Juros acumulados  
-- Saldo total
-- Percentual da meta atingido
-
-**Botão "Exportar CSV"**: Salva os dados da tabela em formato CSV compatível com Excel.
+  
+- **Histograma de Distribuição**:
+  - Distribuição dos saldos finais
+  - Linhas verticais P5, P50 (mediana), P95
 
 ## 🛠️ Tecnologias
 
@@ -330,23 +362,63 @@ Mostra ano a ano:
 |------------|--------|-----|
 | **Python** | 3.10+ | Linguagem base |
 | **PySide6** | 6.5+ | Interface gráfica (Qt) |
-| **Matplotlib** | 3.7+ | Gráficos interativos |
+| **Plotly** | 5.18+ | Gráficos interativos |
 | **NumPy** | 1.24+ | Cálculos vetoriais |
+| **Pandas** | 2.0+ | Manipulação de dados |
 
-## 📝 Fórmula de Juros Compostos
+## 📝 Fórmulas
 
+### Juros Compostos
 ```
 M(n) = M(n-1) × (1 + i) + PMT
 ```
-
 Onde:
 - `M(n)` = Montante no mês n
 - `i` = Taxa mensal (convertida: `(1 + taxa_anual)^(1/12) - 1`)
 - `PMT` = Aporte mensal
 
+### Agregação de Trajetórias (v5.3)
+```python
+# Ordena simulações pelo saldo final
+sorted_indices = np.argsort(all_balances[:, -1])
+
+# Extrai trajetória completa de UMA simulação
+idx_p5 = sorted_indices[int(n_sim * 0.05)]
+balances_p5 = all_balances[idx_p5, :]
+```
+
+### VaR e CVaR
+```
+VaR₉₅ = Média - Percentil₅
+CVaR₉₅ = E[X | X ≤ Percentil₅]
+```
+
+### Sharpe Ratio
+```
+Sharpe = (CAGR - CDI) / Volatilidade
+```
+
 ## 📄 Licença
 
 Este projeto está sob a licença MIT.
+
+---
+
+## 📌 Histórico de Versões
+
+| Versão | Data | Principais Mudanças |
+|--------|------|---------------------|
+| v6.0 | Dez/2024 | Bootstrap Mensal → Cenários Anuais Sintéticos (Fase 1 - Core) |
+| v5.3 | Dez/2024 | Correção agregação de trajetórias Monte Carlo |
+| v5.2 | Dez/2024 | Correção histograma Plotly |
+| v5.1 | Dez/2024 | Modo Expert (Bootstrap, Normal, t-Student) |
+| v4.8 | Dez/2024 | Correção Capital Total Investido |
+| v4.7 | Dez/2024 | CDI B3 + Métricas de Risco |
+| v4.6 | Dez/2024 | Redimensionamento manual tabelas |
+| v4.5 | Dez/2024 | Tabela responsiva |
+| v4.4 | Dez/2024 | Colunas expandidas na projeção |
+| v4.3 | Dez/2024 | Correção formatação pt-BR |
+| v4.2 | Dez/2024 | Cenários reproduzíveis reais |
 
 ---
 

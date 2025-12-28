@@ -37,6 +37,17 @@ from .statistics import (
     normal_returns,
     t_student_returns
 )
+from .bootstrap import (
+    MonthlyReturnData,
+    SyntheticScenariosResult,
+    BootstrapEngine,
+    BootstrapMethod,
+    SyntheticDataConfig,
+    generate_monthly_template_csv,
+    parse_monthly_csv,
+    export_scenarios_csv,
+    import_scenarios_csv,
+)
 
 __all__ = [
     # Calculation
@@ -74,5 +85,15 @@ __all__ = [
     "find_implicit_rate",
     "bootstrap_returns",
     "normal_returns",
-    "t_student_returns"
+    "t_student_returns",
+    # Bootstrap Mensal
+    "MonthlyReturnData",
+    "SyntheticScenariosResult",
+    "BootstrapEngine",
+    "BootstrapMethod",
+    "SyntheticDataConfig",
+    "generate_monthly_template_csv",
+    "parse_monthly_csv",
+    "export_scenarios_csv",
+    "import_scenarios_csv",
 ]
