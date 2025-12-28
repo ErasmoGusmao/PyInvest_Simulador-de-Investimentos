@@ -9,7 +9,7 @@
 - Espaço amostral muito pequeno para estatísticas confiáveis
 - Agora: **108 retornos mensais** → **até 100.000 cenários anuais sintéticos**
 
-### 📊 Novo Módulo: `core/bootstrap.py`
+### 📊 Fase 1: Core Bootstrap (`core/bootstrap.py`)
 
 ```python
 from core.bootstrap import BootstrapEngine, MonthlyReturnData
@@ -32,18 +32,52 @@ print(f"Média: {result.mean:.2f}%")
 print(f"P5/P95: {result.p5:.2f}% / {result.p95:.2f}%")
 ```
 
-### 🔧 Funcionalidades Implementadas (Fase 1 - Core)
+### 🖥️ Fase 2: Wizard de Interface (`ui/monthly_data_wizard.py`)
 
-| Funcionalidade | Descrição |
-|----------------|-----------|
-| **Bootstrap Histórico** | Sorteia 12 meses com reposição (I.I.D.) |
-| **Block Bootstrap** | Preserva autocorrelação temporal |
-| **Cálculo de ACF** | Detecta autocorrelação e sugere método |
-| **Tamanho de Bloco Automático** | Baseado em ACF(1) |
-| **Importação CSV** | Parse de dados mensais |
-| **Exportação CSV** | Com metadados completos |
-| **Template CSV** | Modelo para preenchimento |
-| **100k Cenários** | Suporte a até 100.000 cenários |
+**Wizard de 4 passos:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Passo 1: Tipo de Dados                                                     │
+│  ───────────────────────                                                    │
+│  ○ Retornos Mensais (Recomendado) - Gera até 100.000 cenários              │
+│  ○ Retornos Anuais (Tradicional) - Método Bootstrap direto                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Passo 2: Entrada de Dados                                                  │
+│  ─────────────────────────                                                  │
+│  • Tabela por ano (2017-2025) com 12 meses cada                            │
+│  • Importação/Exportação CSV                                                │
+│  • Status em tempo real (X/108 meses preenchidos)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Passo 3: Configuração Bootstrap                                            │
+│  ──────────────────────────────────                                         │
+│  • Bootstrap Simples (I.I.D.) vs Block Bootstrap                           │
+│  • Diagnóstico automático de ACF                                            │
+│  • Tamanho de bloco automático ou manual                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Passo 4: Geração                                                           │
+│  ────────────────────                                                       │
+│  • Número de cenários (1.000 - 100.000)                                    │
+│  • Barra de progresso em tempo real                                         │
+│  • Estatísticas e histograma dos resultados                                │
+│  • Exportação CSV com metadados                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🔧 Funcionalidades Implementadas
+
+| Funcionalidade | Fase 1 (Core) | Fase 2 (UI) |
+|----------------|---------------|-------------|
+| Bootstrap Histórico | ✅ | ✅ |
+| Block Bootstrap | ✅ | ✅ |
+| Cálculo de ACF | ✅ | ✅ |
+| Tamanho Bloco Automático | ✅ | ✅ |
+| Importação CSV | ✅ | ✅ |
+| Exportação CSV | ✅ | ✅ |
+| Template CSV | ✅ | ✅ |
+| Wizard 4 Passos | - | ✅ |
+| Histograma Plotly | - | ✅ |
+| Progress em Thread | - | ✅ |
 
 ### 📈 Composição de Retornos
 
@@ -408,7 +442,7 @@ Este projeto está sob a licença MIT.
 
 | Versão | Data | Principais Mudanças |
 |--------|------|---------------------|
-| v6.0 | Dez/2024 | Bootstrap Mensal → Cenários Anuais Sintéticos (Fase 1 - Core) |
+| v6.0 | Dez/2024 | Bootstrap Mensal → Cenários Sintéticos (Fase 1 Core + Fase 2 UI Wizard) |
 | v5.3 | Dez/2024 | Correção agregação de trajetórias Monte Carlo |
 | v5.2 | Dez/2024 | Correção histograma Plotly |
 | v5.1 | Dez/2024 | Modo Expert (Bootstrap, Normal, t-Student) |

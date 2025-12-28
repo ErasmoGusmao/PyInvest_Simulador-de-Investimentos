@@ -4,6 +4,7 @@ from .styles_modern import get_modern_style, get_colors, apply_shadow
 from .plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
 from .events_dialog import EventsDialog
 from .historical_dialog import HistoricalReturnsDialog
+from .monthly_data_wizard import MonthlyDataWizard
 from .advanced_widgets import (
     MetricCard, RiskMetricsPanel, PercentileStatsPanel,
     ImplicitParametersTable, DistributionChart, ProjectionChartExpert
@@ -28,6 +29,7 @@ __all__ = [
     # Dialogs
     "EventsDialog",
     "HistoricalReturnsDialog",
+    "MonthlyDataWizard",
     # Advanced Widgets
     "MetricCard",
     "RiskMetricsPanel",

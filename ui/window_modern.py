@@ -31,6 +31,7 @@ from core.statistics import (
     calculate_percentiles, extract_implicit_parameters, calculate_risk_metrics,
     get_risk_free_rate, clear_cdi_cache, get_cdi_info
 )
+from core.bootstrap import SyntheticScenariosResult, SyntheticDataConfig
 from ui.styles_modern import get_modern_style, get_colors, apply_shadow
 from ui.plotly_charts import EvolutionChartPlotly, CompositionChartPlotly
 from ui.widgets import (
@@ -39,6 +40,7 @@ from ui.widgets import (
 )
 from ui.events_dialog import EventsDialog
 from ui.historical_dialog import HistoricalReturnsDialog
+from ui.monthly_data_wizard import MonthlyDataWizard
 from ui.advanced_widgets import (
     RiskMetricsPanel, PercentileStatsPanel,
     ImplicitParametersTable, DistributionChart, ProjectionChartExpert
@@ -208,6 +210,9 @@ class ModernMainWindow(QMainWindow):
         
         # Dados de rendimento histórico para Bootstrap
         self.historical_returns: List[HistoricalReturn] = []
+        
+        # Cenários sintéticos gerados pelo Bootstrap mensal
+        self.synthetic_scenarios: Optional[SyntheticScenariosResult] = None
         
         # Resultado atual da simulação
         self.current_result: Optional[MonteCarloResult] = None
@@ -1832,10 +1837,50 @@ class ModernMainWindow(QMainWindow):
             self.status_bar.showMessage("Modo padrão ativo")
     
     def _on_open_historical(self):
-        """Abre diálogo de dados históricos."""
+        """Abre wizard de dados históricos (mensais ou anuais)."""
+        wizard = MonthlyDataWizard(self)
+        
+        # Se usuário escolher dados anuais, abre dialog tradicional
+        wizard.use_annual_data.connect(self._open_annual_historical_dialog)
+        
+        # Se cenários forem confirmados
+        wizard.scenarios_confirmed.connect(self._on_synthetic_scenarios_confirmed)
+        
+        wizard.exec()
+    
+    def _open_annual_historical_dialog(self):
+        """Abre diálogo tradicional de dados anuais."""
         dialog = HistoricalReturnsDialog(self.historical_returns, self)
         dialog.returns_confirmed.connect(self._on_historical_confirmed)
         dialog.exec()
+    
+    def _on_synthetic_scenarios_confirmed(self, result: SyntheticScenariosResult):
+        """Callback quando cenários sintéticos são confirmados."""
+        # Armazenar resultado
+        self.synthetic_scenarios = result
+        
+        # Criar dados históricos "virtuais" a partir dos cenários
+        # Isso permite compatibilidade com o fluxo existente
+        self.historical_returns = []
+        
+        # Atualizar status
+        self._update_synthetic_status()
+    
+    def _update_synthetic_status(self):
+        """Atualiza status com cenários sintéticos."""
+        if hasattr(self, 'synthetic_scenarios') and self.synthetic_scenarios is not None:
+            result = self.synthetic_scenarios
+            self.historical_status.setText(
+                f"✓ {result.n_scenarios:,} cenários sintéticos | "
+                f"Média: {result.mean:.1f}% | P5/P95: {result.p5:.1f}%/{result.p95:.1f}%"
+            )
+            self.historical_status.setStyleSheet("""
+                font-size: 11px;
+                color: #3B82F6;
+                font-style: normal;
+                font-weight: 600;
+                background: transparent;
+            """)
     
     def _on_historical_confirmed(self, returns: List[HistoricalReturn]):
         """Callback quando dados históricos são confirmados."""

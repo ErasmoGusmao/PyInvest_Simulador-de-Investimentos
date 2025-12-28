@@ -123,16 +123,30 @@ class MonthlyReturnData:
     
     def get_statistics(self) -> Dict[str, float]:
         """Calcula estatísticas dos retornos mensais."""
-        from scipy import stats as scipy_stats
+        n = len(self.returns)
+        mean = float(np.mean(self.returns))
+        std = float(np.std(self.returns))
+        
+        # Calcular skewness manualmente
+        if std > 0 and n > 2:
+            skewness = float(np.mean(((self.returns - mean) / std) ** 3))
+        else:
+            skewness = 0.0
+        
+        # Calcular kurtosis manualmente (excess kurtosis)
+        if std > 0 and n > 3:
+            kurtosis = float(np.mean(((self.returns - mean) / std) ** 4) - 3)
+        else:
+            kurtosis = 0.0
         
         return {
-            'mean': float(np.mean(self.returns)),
-            'std': float(np.std(self.returns)),
+            'mean': mean,
+            'std': std,
             'min': float(np.min(self.returns)),
             'max': float(np.max(self.returns)),
             'median': float(np.median(self.returns)),
-            'skewness': float(scipy_stats.skew(self.returns)),
-            'kurtosis': float(scipy_stats.kurtosis(self.returns)),
+            'skewness': skewness,
+            'kurtosis': kurtosis,
             'p5': float(np.percentile(self.returns, 5)),
             'p95': float(np.percentile(self.returns, 95)),
         }
@@ -184,8 +198,6 @@ class SyntheticScenariosResult:
     
     def _calculate_statistics(self):
         """Calcula todas as estatísticas dos cenários."""
-        from scipy import stats as scipy_stats
-        
         self.mean = float(np.mean(self.annual_returns))
         self.std = float(np.std(self.annual_returns))
         self.median = float(np.median(self.annual_returns))
@@ -200,8 +212,19 @@ class SyntheticScenariosResult:
         self.p90 = float(np.percentile(self.annual_returns, 90))
         self.p95 = float(np.percentile(self.annual_returns, 95))
         
-        self.skewness = float(scipy_stats.skew(self.annual_returns))
-        self.kurtosis = float(scipy_stats.kurtosis(self.annual_returns))
+        # Calcular skewness e kurtosis manualmente (sem scipy)
+        n = len(self.annual_returns)
+        if self.std > 0 and n > 2:
+            standardized = (self.annual_returns - self.mean) / self.std
+            self.skewness = float(np.mean(standardized ** 3))
+        else:
+            self.skewness = 0.0
+        
+        if self.std > 0 and n > 3:
+            standardized = (self.annual_returns - self.mean) / self.std
+            self.kurtosis = float(np.mean(standardized ** 4) - 3)  # Excess kurtosis
+        else:
+            self.kurtosis = 0.0
     
     def get_method_display_name(self) -> str:
         """Retorna nome amigável do método."""
