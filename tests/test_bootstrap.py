@@ -263,17 +263,16 @@ class TestCSVFunctions(unittest.TestCase):
         """Teste de geração de template CSV."""
         template = generate_monthly_template_csv()
         
-        self.assertIn('Período', template)
-        self.assertIn('Retorno (%)', template)
-        self.assertIn('Jan/2017', template)
-        self.assertIn('Dez/2025', template)
+        self.assertIn('Nº do Mês', template)
+        self.assertIn('Retorno do Mês (%)', template)
+        self.assertIn('Observação', template)
         
-        # Verificar número de linhas (header + 108 meses)
+        # Verificar número de linhas (header + 12 meses de exemplo)
         lines = template.strip().split('\n')
-        self.assertEqual(len(lines), 109)
+        self.assertEqual(len(lines), 13)
     
     def test_parse_csv(self):
-        """Teste de parse de CSV."""
+        """Teste de parse de CSV - formato legado (Mmm/AAAA)."""
         csv_content = """Período;Retorno (%);Notas
 Jan/2017;5.66;Primeiro mês
 Fev/2017;2.30;
@@ -313,6 +312,29 @@ Dez/2017;2,80;"""
         data = parse_monthly_csv(csv_content)
         
         self.assertAlmostEqual(data.returns[0], 5.66, places=2)
+    
+    def test_parse_csv_new_format(self):
+        """Teste de parse com novo formato (Nº do Mês sequencial)."""
+        csv_content = """Nº do Mês;Retorno do Mês (%);Observação
+1;1.08;Primeiro mês
+2;0.86;
+3;1.05;
+4;0.79;
+5;0.93;
+6;0.81;
+7;0.80;
+8;0.80;
+9;0.64;
+10;0.64;
+11;0.57;
+12;0.54;"""
+        
+        data = parse_monthly_csv(csv_content)
+        
+        self.assertEqual(data.n_months, 12)
+        self.assertEqual(data.periods[0], 'Mês 1')
+        self.assertAlmostEqual(data.returns[0], 1.08, places=2)
+        self.assertAlmostEqual(data.returns[11], 0.54, places=2)
     
     def test_export_and_import_scenarios(self):
         """Teste de exportação e reimportação de cenários."""

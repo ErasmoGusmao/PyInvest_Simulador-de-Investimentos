@@ -137,6 +137,10 @@ class MonthlyDataWizard(QDialog):
         layout.addWidget(self.stacked, stretch=1)
         
         self._create_footer(layout)
+        
+        # Inicializar tabela com 12 linhas vazias (após footer estar criado)
+        self._add_multiple_rows(12)
+        
         self._go_to_page(0)
     
     def _create_header(self, parent_layout):
@@ -219,7 +223,7 @@ class MonthlyDataWizard(QDialog):
         if recommended:
             badge = QLabel("⭐ RECOMENDADO")
             badge.setStyleSheet("background-color: #FEF3C7; color: #92400E; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold;")
-            badge.setFixedWidth(120)
+            badge.setFixedWidth(140)  # Aumentado para caber o texto completo
             layout.addWidget(badge)
         
         title_label = QLabel(title)
@@ -309,210 +313,501 @@ class MonthlyDataWizard(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(24, 16, 24, 16)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
         
+        # Toolbar superior simplificada - apenas Adicionar Linha e Remover
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
         
-        btn_export_template = QPushButton("📥 Exportar Modelo CSV")
-        btn_export_template.setObjectName("btn_secondary")
-        btn_export_template.setCursor(Qt.PointingHandCursor)
-        btn_export_template.clicked.connect(self._export_template)
-        toolbar.addWidget(btn_export_template)
+        btn_add_row = QPushButton("➕ Adicionar Linha")
+        btn_add_row.setObjectName("btn_primary")
+        btn_add_row.setCursor(Qt.PointingHandCursor)
+        btn_add_row.clicked.connect(self._add_row)
+        toolbar.addWidget(btn_add_row)
         
-        btn_import = QPushButton("📤 Importar CSV")
-        btn_import.setObjectName("btn_secondary")
-        btn_import.setCursor(Qt.PointingHandCursor)
-        btn_import.clicked.connect(self._import_monthly_csv)
-        toolbar.addWidget(btn_import)
-        
-        btn_example = QPushButton("📋 Carregar Exemplo")
-        btn_example.setObjectName("btn_secondary")
-        btn_example.setCursor(Qt.PointingHandCursor)
-        btn_example.clicked.connect(self._load_example_data)
-        toolbar.addWidget(btn_example)
+        btn_remove_row = QPushButton("➖ Remover Última")
+        btn_remove_row.setObjectName("btn_secondary")
+        btn_remove_row.setCursor(Qt.PointingHandCursor)
+        btn_remove_row.clicked.connect(self._remove_last_row)
+        toolbar.addWidget(btn_remove_row)
         
         toolbar.addStretch()
         
-        self.data_status_label = QLabel("0/108 meses preenchidos")
+        self.data_status_label = QLabel("0 meses preenchidos (mínimo: 12)")
         self.data_status_label.setStyleSheet("color: #6B7280; font-weight: 500;")
         toolbar.addWidget(self.data_status_label)
         
         layout.addLayout(toolbar)
         
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        # Área principal: Tabela + Gráfico/Estatísticas lado a lado
+        splitter = QSplitter(Qt.Horizontal)
         
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(16)
+        # === LADO ESQUERDO: Tabela ===
+        table_widget = QWidget()
+        table_layout = QVBoxLayout(table_widget)
+        table_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.year_tables = {}
-        self.month_inputs = {}
+        self.data_table = QTableWidget()
+        self.data_table.setColumnCount(3)
+        self.data_table.setHorizontalHeaderLabels(['Nº do Mês', 'Retorno (%)', 'Obs.'])
         
-        for year in range(2017, 2026):
-            year_frame = self._create_year_section(year)
-            scroll_layout.addWidget(year_frame)
+        # Configurar colunas - reduzir Observação
+        header = self.data_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        self.data_table.setColumnWidth(0, 80)
+        self.data_table.setColumnWidth(1, 100)
         
-        scroll_layout.addStretch()
-        scroll.setWidget(scroll_content)
-        layout.addWidget(scroll, stretch=1)
+        # Estilo da tabela
+        self.data_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+                gridline-color: #F3F4F6;
+            }
+            QTableWidget::item {
+                padding: 6px;
+            }
+            QHeaderView::section {
+                background-color: #F9FAFB;
+                color: #374151;
+                font-weight: 600;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #E5E7EB;
+            }
+        """)
+        
+        self.data_table.setAlternatingRowColors(True)
+        self.data_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.data_table.cellChanged.connect(self._on_cell_changed)
+        
+        table_layout.addWidget(self.data_table)
+        splitter.addWidget(table_widget)
+        
+        # === LADO DIREITO: Gráfico + Estatísticas ===
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setSpacing(12)
+        
+        # Gráfico de evolução
+        chart_frame = QFrame()
+        chart_frame.setObjectName("card")
+        chart_frame.setStyleSheet("QFrame#card { background-color: white; border: 1px solid #E5E7EB; border-radius: 8px; }")
+        chart_layout = QVBoxLayout(chart_frame)
+        chart_layout.setContentsMargins(12, 12, 12, 12)
+        
+        chart_title = QLabel("📈 Evolução dos Retornos")
+        chart_title.setStyleSheet("font-weight: bold; color: #1F2937;")
+        chart_layout.addWidget(chart_title)
+        
+        self.monthly_chart = QWebEngineView()
+        self.monthly_chart.setMinimumHeight(200)
+        chart_layout.addWidget(self.monthly_chart)
+        
+        right_layout.addWidget(chart_frame, stretch=2)
+        
+        # Estatísticas
+        stats_frame = QFrame()
+        stats_frame.setObjectName("card")
+        stats_frame.setStyleSheet("QFrame#card { background-color: white; border: 1px solid #E5E7EB; border-radius: 8px; }")
+        stats_layout = QVBoxLayout(stats_frame)
+        stats_layout.setContentsMargins(12, 12, 12, 12)
+        
+        stats_title = QLabel("📊 Estatísticas")
+        stats_title.setStyleSheet("font-weight: bold; color: #1F2937;")
+        stats_layout.addWidget(stats_title)
+        
+        self.monthly_stats_label = QLabel("Preencha pelo menos 12 meses para ver estatísticas.")
+        self.monthly_stats_label.setWordWrap(True)
+        self.monthly_stats_label.setStyleSheet("color: #6B7280; font-size: 12px;")
+        stats_layout.addWidget(self.monthly_stats_label)
+        
+        right_layout.addWidget(stats_frame, stretch=1)
+        
+        splitter.addWidget(right_widget)
+        splitter.setSizes([400, 350])
+        
+        layout.addWidget(splitter, stretch=1)
+        
+        # Info box
+        info_frame = QFrame()
+        info_frame.setObjectName("card_info")
+        info_frame.setStyleSheet("QFrame#card_info { background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; }")
+        info_layout = QHBoxLayout(info_frame)
+        info_layout.setContentsMargins(12, 8, 12, 8)
+        
+        info_icon = QLabel("💡")
+        info_icon.setStyleSheet("font-size: 16px;")
+        info_layout.addWidget(info_icon)
+        
+        info_text = QLabel(
+            "<b>Dica:</b> Informe os retornos mensais em sequência (mês 1, 2, 3...). "
+            "Mínimo de 12 meses para gerar cenários."
+        )
+        info_text.setWordWrap(True)
+        info_text.setStyleSheet("color: #1E40AF; font-size: 11px;")
+        info_layout.addWidget(info_text, stretch=1)
+        
+        layout.addWidget(info_frame)
+        
+        # Guardar referências para botões do footer da página 2
+        self.page2_bottom_buttons = {
+            'export': None,
+            'import': None,
+            'example': None,
+            'clear': None
+        }
         
         self.stacked.addWidget(page)
+        
+        # NÃO inicializar linhas aqui - será feito após criar o footer
 
-    def _create_year_section(self, year):
-        frame = QFrame()
-        frame.setObjectName("card")
-        frame.setStyleSheet("QFrame#card { background-color: white; border: 1px solid #E5E7EB; border-radius: 8px; }")
+    def _add_row(self):
+        """Adiciona uma nova linha na tabela."""
+        row = self.data_table.rowCount()
+        self.data_table.blockSignals(True)
+        self.data_table.insertRow(row)
         
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(8)
+        # Coluna 0: Nº do Mês (não editável)
+        month_item = QTableWidgetItem(str(row + 1))
+        month_item.setFlags(month_item.flags() & ~Qt.ItemIsEditable)
+        month_item.setTextAlignment(Qt.AlignCenter)
+        month_item.setBackground(QColor("#F9FAFB"))
+        self.data_table.setItem(row, 0, month_item)
         
-        header = QHBoxLayout()
-        year_label = QLabel(f"📅 {year}")
-        year_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #1F2937;")
-        header.addWidget(year_label)
-        header.addStretch()
+        # Coluna 1: Retorno (editável)
+        return_item = QTableWidgetItem("")
+        return_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.data_table.setItem(row, 1, return_item)
         
-        year_status = QLabel("0/12 meses")
-        year_status.setObjectName(f"status_{year}")
-        year_status.setStyleSheet("color: #EF4444; font-size: 12px;")
-        header.addWidget(year_status)
-        layout.addLayout(header)
+        # Coluna 2: Observação (editável)
+        obs_item = QTableWidgetItem("")
+        self.data_table.setItem(row, 2, obs_item)
         
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        
-        for i, month in enumerate(MONTHS_PT):
-            row = i // 4
-            col = i % 4
-            
-            month_widget = QWidget()
-            month_layout = QHBoxLayout(month_widget)
-            month_layout.setContentsMargins(0, 0, 0, 0)
-            month_layout.setSpacing(4)
-            
-            month_label = QLabel(f"{month}:")
-            month_label.setFixedWidth(35)
-            month_label.setStyleSheet("color: #6B7280; font-size: 12px;")
-            month_layout.addWidget(month_label)
-            
-            month_input = QDoubleSpinBox()
-            month_input.setRange(-99.99, 999.99)
-            month_input.setDecimals(2)
-            month_input.setSuffix(" %")
-            month_input.setSpecialValueText("")
-            month_input.setValue(-99.99)
-            month_input.setMinimumWidth(90)
-            month_input.setStyleSheet("QDoubleSpinBox { padding: 4px 8px; border: 1px solid #D1D5DB; border-radius: 4px; }")
-            
-            period = f"{month}/{year}"
-            month_input.setProperty("period", period)
-            month_input.valueChanged.connect(lambda v, p=period: self._on_month_value_changed(p, v))
-            
-            self.month_inputs[period] = month_input
-            month_layout.addWidget(month_input)
-            grid.addWidget(month_widget, row, col)
-        
-        layout.addLayout(grid)
-        self.year_tables[year] = (frame, year_status)
-        return frame
-
-    def _on_month_value_changed(self, period, value):
-        if value <= -99:
-            if period in self.monthly_values:
-                del self.monthly_values[period]
-        else:
-            self.monthly_values[period] = value
+        self.data_table.blockSignals(False)
         self._update_data_status()
 
-    def _update_data_status(self):
-        total_filled = len(self.monthly_values)
-        self.data_status_label.setText(f"{total_filled}/108 meses preenchidos")
+    def _add_multiple_rows(self, count: int):
+        """Adiciona múltiplas linhas."""
+        for _ in range(count):
+            self._add_row()
+
+    def _remove_last_row(self):
+        """Remove a última linha."""
+        row_count = self.data_table.rowCount()
+        if row_count > 0:
+            self.data_table.removeRow(row_count - 1)
+            self._update_data_status()
+
+    def _clear_all_data(self):
+        """Limpa todos os dados."""
+        reply = QMessageBox.question(
+            self, "Confirmar",
+            "Remover todos os dados?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.data_table.setRowCount(0)
+            self.monthly_values.clear()
+            self._add_multiple_rows(12)  # Reiniciar com 12 linhas
+            self._update_data_status()
+
+    def _on_cell_changed(self, row: int, column: int):
+        """Callback quando uma célula é alterada."""
+        if column == 1:  # Coluna de retorno
+            self._update_monthly_values()
+            self._update_data_status()
+
+    def _update_monthly_values(self):
+        """Atualiza dicionário de valores mensais a partir da tabela."""
+        self.monthly_values.clear()
         
-        if total_filled >= 108:
+        for row in range(self.data_table.rowCount()):
+            return_item = self.data_table.item(row, 1)
+            if return_item and return_item.text().strip():
+                try:
+                    # Aceitar vírgula ou ponto como separador decimal
+                    value_text = return_item.text().strip().replace(',', '.')
+                    value = float(value_text)
+                    month_num = row + 1
+                    self.monthly_values[str(month_num)] = value
+                except ValueError:
+                    pass  # Ignorar valores inválidos
+
+    def _update_data_status(self):
+        """Atualiza status de preenchimento."""
+        total_filled = len(self.monthly_values)
+        
+        if total_filled >= 12:
+            self.data_status_label.setText(f"✅ {total_filled} meses preenchidos")
             self.data_status_label.setStyleSheet("color: #10B981; font-weight: 500;")
-        elif total_filled >= 12:
-            self.data_status_label.setStyleSheet("color: #F59E0B; font-weight: 500;")
         else:
+            self.data_status_label.setText(f"⚠️ {total_filled} meses preenchidos (mínimo: 12)")
             self.data_status_label.setStyleSheet("color: #EF4444; font-weight: 500;")
         
-        for year in range(2017, 2026):
-            filled_in_year = sum(1 for p in self.monthly_values if f"/{year}" in p)
-            _, status_label = self.year_tables[year]
-            status_label.setText(f"{filled_in_year}/12 meses")
-            
-            if filled_in_year == 12:
-                status_label.setStyleSheet("color: #10B981; font-size: 12px; font-weight: bold;")
-            elif filled_in_year > 0:
-                status_label.setStyleSheet("color: #F59E0B; font-size: 12px;")
-            else:
-                status_label.setStyleSheet("color: #9CA3AF; font-size: 12px;")
+        # Atualizar gráfico e estatísticas
+        self._update_monthly_chart()
+        self._update_monthly_stats()
         
         self._update_navigation_buttons()
 
+    def _update_monthly_chart(self):
+        """Atualiza gráfico de evolução dos retornos mensais."""
+        if not hasattr(self, 'monthly_chart'):
+            return
+            
+        if len(self.monthly_values) < 2:
+            self.monthly_chart.setHtml("<html><body style='display:flex;align-items:center;justify-content:center;height:100%;color:#9CA3AF;'>Preencha dados para ver o gráfico</body></html>")
+            return
+        
+        try:
+            sorted_keys = sorted(self.monthly_values.keys(), key=lambda x: int(x))
+            months = [int(k) for k in sorted_keys]
+            returns = [self.monthly_values[k] for k in sorted_keys]
+            
+            html = f"""<!DOCTYPE html><html><head>
+            <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+            <style>body {{ margin: 0; }}</style></head><body>
+            <div id="chart" style="width:100%;height:180px;"></div>
+            <script>
+            var data = [{{
+                x: {months},
+                y: {returns},
+                type: 'scatter',
+                mode: 'lines+markers',
+                marker: {{color: '#10B981', size: 4}},
+                line: {{color: '#10B981', width: 2}}
+            }}];
+            var layout = {{
+                margin: {{l: 40, r: 10, t: 10, b: 30}},
+                xaxis: {{title: 'Mês', dtick: {max(1, len(months)//10)}}},
+                yaxis: {{title: 'Retorno (%)'}},
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            }};
+            Plotly.newPlot('chart', data, layout, {{responsive: true, displayModeBar: false}});
+            </script></body></html>"""
+            self.monthly_chart.setHtml(html)
+        except Exception:
+            pass
+
+    def _update_monthly_stats(self):
+        """Atualiza estatísticas dos retornos mensais."""
+        if not hasattr(self, 'monthly_stats_label'):
+            return
+            
+        if len(self.monthly_values) < 12:
+            self.monthly_stats_label.setText("Preencha pelo menos 12 meses para ver estatísticas.")
+            return
+        
+        try:
+            returns = np.array(list(self.monthly_values.values()))
+            
+            mean_val = float(np.mean(returns))
+            median_val = float(np.median(returns))
+            std_val = float(np.std(returns))
+            min_val = float(np.min(returns))
+            max_val = float(np.max(returns))
+            
+            # Calcular retorno anual composto (aproximado)
+            annual_return = (1 + mean_val/100)**12 - 1
+            annual_return_pct = annual_return * 100
+            
+            stats_html = f"""
+            <b>Período:</b> {len(self.monthly_values)} meses<br><br>
+            <b>Média Mensal:</b> {mean_val:.2f}%<br>
+            <b>Mediana:</b> {median_val:.2f}%<br>
+            <b>Desvio Padrão:</b> {std_val:.2f}%<br>
+            <b>Mínimo:</b> {min_val:.2f}%<br>
+            <b>Máximo:</b> {max_val:.2f}%<br><br>
+            <b>Retorno Anual (aprox.):</b> {annual_return_pct:.1f}%<br>
+            <br><i style='color:#6B7280;font-size:10px;'>Estes valores serão usados no Bootstrap.</i>
+            """
+            self.monthly_stats_label.setText("")
+            self.monthly_stats_label.setTextFormat(Qt.RichText)
+            self.monthly_stats_label.setText(stats_html)
+        except Exception:
+            self.monthly_stats_label.setText("Erro ao calcular estatísticas.")
+
     def _export_template(self):
-        filepath, _ = QFileDialog.getSaveFileName(self, "Salvar Template", "rendimentos_mensais_template.csv", "CSV (*.csv)")
+        """Exporta template CSV no novo formato."""
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Template", 
+            "rendimentos_mensais_template.csv", 
+            "CSV (*.csv)"
+        )
         if not filepath:
             return
         try:
-            template = generate_monthly_template_csv()
+            # Gerar template no novo formato
+            lines = ["Nº do Mês;Retorno do Mês (%);Observação"]
+            for i in range(1, 13):  # 12 linhas de exemplo
+                lines.append(f"{i};;")
+            
+            template = "\n".join(lines)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(template)
-            QMessageBox.information(self, "Sucesso", f"Template exportado para:\n{filepath}")
+            QMessageBox.information(
+                self, "Sucesso", 
+                f"Template exportado para:\n{filepath}\n\n"
+                "Preencha a coluna 'Retorno do Mês (%)' com os valores."
+            )
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao exportar: {str(e)}")
 
     def _import_monthly_csv(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Importar Dados Mensais", "", "CSV (*.csv);;Todos (*)")
+        """Importa dados de CSV no novo formato."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Importar Dados Mensais", 
+            "", 
+            "CSV (*.csv);;Todos (*)"
+        )
         if not filepath:
             return
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
-            data = parse_monthly_csv(content)
+            
+            # Parse do novo formato
+            lines = content.strip().split('\n')
+            
+            # Detectar delimitador
+            delimiter = ';' if ';' in lines[0] else ','
+            
+            # Pular header se existir
+            start_idx = 0
+            first_line = lines[0].lower()
+            if 'mês' in first_line or 'mes' in first_line or 'retorno' in first_line or 'month' in first_line:
+                start_idx = 1
+            
+            # Limpar tabela atual
+            self.data_table.setRowCount(0)
             self.monthly_values.clear()
-            for period, ret in zip(data.periods, data.returns):
-                self.monthly_values[period] = ret
-                if period in self.month_inputs:
-                    self.month_inputs[period].blockSignals(True)
-                    self.month_inputs[period].setValue(ret)
-                    self.month_inputs[period].blockSignals(False)
+            
+            # Processar linhas
+            for line in lines[start_idx:]:
+                if not line.strip():
+                    continue
+                    
+                parts = line.split(delimiter)
+                if len(parts) >= 2:
+                    month_num = parts[0].strip()
+                    return_str = parts[1].strip().replace(',', '.').replace('%', '')
+                    obs = parts[2].strip() if len(parts) > 2 else ""
+                    
+                    if return_str:
+                        try:
+                            return_val = float(return_str)
+                            
+                            # Adicionar linha na tabela
+                            row = self.data_table.rowCount()
+                            self.data_table.blockSignals(True)
+                            self.data_table.insertRow(row)
+                            
+                            # Nº do Mês
+                            month_item = QTableWidgetItem(str(row + 1))
+                            month_item.setFlags(month_item.flags() & ~Qt.ItemIsEditable)
+                            month_item.setTextAlignment(Qt.AlignCenter)
+                            month_item.setBackground(QColor("#F9FAFB"))
+                            self.data_table.setItem(row, 0, month_item)
+                            
+                            # Retorno
+                            return_item = QTableWidgetItem(f"{return_val:.2f}")
+                            return_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                            self.data_table.setItem(row, 1, return_item)
+                            
+                            # Observação
+                            obs_item = QTableWidgetItem(obs)
+                            self.data_table.setItem(row, 2, obs_item)
+                            
+                            self.data_table.blockSignals(False)
+                            
+                            # Armazenar valor
+                            self.monthly_values[str(row + 1)] = return_val
+                            
+                        except ValueError:
+                            pass  # Ignorar valores inválidos
+            
             self._update_data_status()
-            QMessageBox.information(self, "Importação Concluída", f"{data.n_months} meses importados!\nPeríodo: {data.period_range}")
+            QMessageBox.information(
+                self, "Importação Concluída", 
+                f"{len(self.monthly_values)} meses importados!"
+            )
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao importar:\n{str(e)}")
 
     def _load_example_data(self):
-        reply = QMessageBox.question(self, "Carregar Exemplo", "Isso substituirá os dados atuais.\n\nDeseja continuar?", QMessageBox.Yes | QMessageBox.No)
+        """Carrega dados de exemplo (CDI mensal aproximado)."""
+        reply = QMessageBox.question(
+            self, "Carregar Exemplo", 
+            "Isso substituirá os dados atuais por 108 meses de exemplo (CDI).\n\nDeseja continuar?", 
+            QMessageBox.Yes | QMessageBox.No
+        )
         if reply != QMessageBox.Yes:
             return
         
-        example_returns = {
-            2017: [1.08, 0.86, 1.05, 0.79, 0.93, 0.81, 0.80, 0.80, 0.64, 0.64, 0.57, 0.54],
-            2018: [0.58, 0.46, 0.53, 0.52, 0.52, 0.52, 0.54, 0.57, 0.47, 0.54, 0.49, 0.49],
-            2019: [0.54, 0.49, 0.47, 0.52, 0.54, 0.47, 0.57, 0.50, 0.46, 0.48, 0.38, 0.37],
-            2020: [0.38, 0.29, 0.34, 0.28, 0.24, 0.21, 0.19, 0.16, 0.16, 0.16, 0.15, 0.16],
-            2021: [0.15, 0.13, 0.20, 0.21, 0.27, 0.31, 0.36, 0.43, 0.44, 0.49, 0.59, 0.77],
-            2022: [0.73, 0.76, 0.93, 0.83, 1.03, 1.02, 1.03, 1.17, 1.07, 1.02, 1.02, 1.12],
-            2023: [1.12, 0.92, 1.17, 0.92, 1.12, 1.07, 1.07, 1.14, 0.97, 1.00, 0.92, 0.89],
-            2024: [0.97, 0.80, 0.83, 0.89, 0.83, 0.79, 0.91, 0.87, 0.83, 0.93, 0.79, 0.93],
-            2025: [1.00, 0.99, 1.06, 0.94, 1.01, 0.89, 0.95, 0.92, 0.88, 0.97, 0.91, 1.05]
-        }
+        # Dados de exemplo: CDI mensal aproximado 2017-2025 (108 meses)
+        example_returns = [
+            # 2017
+            1.08, 0.86, 1.05, 0.79, 0.93, 0.81, 0.80, 0.80, 0.64, 0.64, 0.57, 0.54,
+            # 2018
+            0.58, 0.46, 0.53, 0.52, 0.52, 0.52, 0.54, 0.57, 0.47, 0.54, 0.49, 0.49,
+            # 2019
+            0.54, 0.49, 0.47, 0.52, 0.54, 0.47, 0.57, 0.50, 0.46, 0.48, 0.38, 0.37,
+            # 2020
+            0.38, 0.29, 0.34, 0.28, 0.24, 0.21, 0.19, 0.16, 0.16, 0.16, 0.15, 0.16,
+            # 2021
+            0.15, 0.13, 0.20, 0.21, 0.27, 0.31, 0.36, 0.43, 0.44, 0.49, 0.59, 0.77,
+            # 2022
+            0.73, 0.76, 0.93, 0.83, 1.03, 1.02, 1.03, 1.17, 1.07, 1.02, 1.02, 1.12,
+            # 2023
+            1.12, 0.92, 1.17, 0.92, 1.12, 1.07, 1.07, 1.14, 0.97, 1.00, 0.92, 0.89,
+            # 2024
+            0.97, 0.80, 0.83, 0.89, 0.83, 0.79, 0.91, 0.87, 0.83, 0.93, 0.79, 0.93,
+            # 2025
+            1.00, 0.99, 1.06, 0.94, 1.01, 0.89, 0.95, 0.92, 0.88, 0.97, 0.91, 1.05
+        ]
         
+        # Limpar tabela
+        self.data_table.setRowCount(0)
         self.monthly_values.clear()
-        for year, returns in example_returns.items():
-            for i, ret in enumerate(returns):
-                period = f"{MONTHS_PT[i]}/{year}"
-                self.monthly_values[period] = ret
-                if period in self.month_inputs:
-                    self.month_inputs[period].blockSignals(True)
-                    self.month_inputs[period].setValue(ret)
-                    self.month_inputs[period].blockSignals(False)
         
+        # Preencher tabela
+        self.data_table.blockSignals(True)
+        for i, ret in enumerate(example_returns):
+            row = self.data_table.rowCount()
+            self.data_table.insertRow(row)
+            
+            # Nº do Mês
+            month_item = QTableWidgetItem(str(i + 1))
+            month_item.setFlags(month_item.flags() & ~Qt.ItemIsEditable)
+            month_item.setTextAlignment(Qt.AlignCenter)
+            month_item.setBackground(QColor("#F9FAFB"))
+            self.data_table.setItem(row, 0, month_item)
+            
+            # Retorno
+            return_item = QTableWidgetItem(f"{ret:.2f}")
+            return_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.data_table.setItem(row, 1, return_item)
+            
+            # Observação
+            obs_item = QTableWidgetItem("")
+            self.data_table.setItem(row, 2, obs_item)
+            
+            # Armazenar valor
+            self.monthly_values[str(i + 1)] = ret
+        
+        self.data_table.blockSignals(False)
         self._update_data_status()
-        QMessageBox.information(self, "Dados Carregados", "108 meses de dados de exemplo (CDI aproximado) foram carregados.")
+        
+        QMessageBox.information(
+            self, "Dados Carregados", 
+            f"108 meses de dados de exemplo (CDI aproximado) foram carregados."
+        )
 
     def _create_page3_bootstrap_config(self):
         page = QWidget()
@@ -733,33 +1028,21 @@ class MonthlyDataWizard(QDialog):
         stats_tab = QWidget()
         stats_layout = QVBoxLayout(stats_tab)
         self.stats_grid = QGridLayout()
-        self.stats_grid.setSpacing(16)
+        self.stats_grid.setSpacing(12)
         stats_layout.addLayout(self.stats_grid)
         tabs.addTab(stats_tab, "📊 Estatísticas")
         
         dist_tab = QWidget()
         dist_layout = QVBoxLayout(dist_tab)
+        dist_layout.setContentsMargins(8, 8, 8, 8)
         self.dist_chart = QWebEngineView()
-        self.dist_chart.setMinimumHeight(300)
+        self.dist_chart.setMinimumHeight(350)  # Aumentado para melhor visualização
         dist_layout.addWidget(self.dist_chart)
         tabs.addTab(dist_tab, "📈 Distribuição")
         
         results_layout.addWidget(tabs)
         
-        actions_layout = QHBoxLayout()
-        btn_export = QPushButton("📥 Exportar CSV")
-        btn_export.setObjectName("btn_secondary")
-        btn_export.setCursor(Qt.PointingHandCursor)
-        btn_export.clicked.connect(self._export_scenarios)
-        actions_layout.addWidget(btn_export)
-        
-        btn_import = QPushButton("📤 Importar Cenários")
-        btn_import.setObjectName("btn_secondary")
-        btn_import.setCursor(Qt.PointingHandCursor)
-        btn_import.clicked.connect(self._import_scenarios)
-        actions_layout.addWidget(btn_import)
-        actions_layout.addStretch()
-        results_layout.addLayout(actions_layout)
+        # Botões movidos para o footer - removidos daqui
         
         layout.addWidget(self.results_frame)
         layout.addStretch()
@@ -837,26 +1120,33 @@ class MonthlyDataWizard(QDialog):
         for i, (label, value, color) in enumerate(stats):
             row, col = i // 4, i % 4
             card = QFrame()
-            card.setStyleSheet(f"QFrame {{ background-color: {color}10; border: 1px solid {color}40; border-radius: 8px; }}")
+            card.setMinimumHeight(60)
+            card.setStyleSheet(f"""
+                QFrame {{ 
+                    background-color: {color}15; 
+                    border: 1px solid {color}30; 
+                    border-radius: 8px; 
+                }}
+            """)
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(12, 8, 12, 8)
-            card_layout.setSpacing(4)
+            card_layout.setContentsMargins(10, 6, 10, 6)
+            card_layout.setSpacing(2)
             
             label_w = QLabel(label)
-            label_w.setStyleSheet(f"color: {color}; font-size: 11px;")
+            label_w.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
             card_layout.addWidget(label_w)
             
             value_w = QLabel(value)
-            value_w.setStyleSheet("color: #1F2937; font-size: 16px; font-weight: bold;")
+            value_w.setStyleSheet(f"color: {color}; font-size: 14px; font-weight: bold;")
             card_layout.addWidget(value_w)
             
             self.stats_grid.addWidget(card, row, col)
         
         returns = r.annual_returns.tolist()
         html = f"""<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>body {{ margin: 0; }}</style></head><body>
-        <div id="chart" style="width:100%;height:300px;"></div><script>
+        <div id="chart" style="width:100%;height:340px;"></div><script>
         var data = [{{x: {returns}, type: 'histogram', nbinsx: 50, marker: {{color: '#8B5CF6', line: {{color: '#7C3AED', width: 1}}}}, hovertemplate: 'Retorno: %{{x:.2f}}%<br>Freq: %{{y}}<extra></extra>'}}];
-        var layout = {{margin: {{l: 50, r: 20, t: 30, b: 50}}, xaxis: {{title: 'Retorno Anual (%)'}}, yaxis: {{title: 'Frequência'}}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        var layout = {{margin: {{l: 60, r: 30, t: 30, b: 50}}, xaxis: {{title: 'Retorno Anual (%)'}}, yaxis: {{title: 'Frequência'}}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
             shapes: [{{type: 'line', x0: {r.p5}, x1: {r.p5}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#EF4444', width: 2, dash: 'dash'}}}},
                      {{type: 'line', x0: {r.p95}, x1: {r.p95}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#10B981', width: 2, dash: 'dash'}}}},
                      {{type: 'line', x0: {r.mean}, x1: {r.mean}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#3B82F6', width: 2}}}}],
@@ -914,6 +1204,50 @@ class MonthlyDataWizard(QDialog):
         self.btn_cancel.setCursor(Qt.PointingHandCursor)
         self.btn_cancel.clicked.connect(self.reject)
         footer_layout.addWidget(self.btn_cancel)
+        
+        # Botões específicos da página 2 (dados mensais)
+        self.btn_export_csv = QPushButton("📥 Exportar Modelo")
+        self.btn_export_csv.setObjectName("btn_secondary")
+        self.btn_export_csv.setCursor(Qt.PointingHandCursor)
+        self.btn_export_csv.clicked.connect(self._export_template)
+        self.btn_export_csv.hide()
+        footer_layout.addWidget(self.btn_export_csv)
+        
+        self.btn_import_csv = QPushButton("📤 Importar CSV")
+        self.btn_import_csv.setObjectName("btn_secondary")
+        self.btn_import_csv.setCursor(Qt.PointingHandCursor)
+        self.btn_import_csv.clicked.connect(self._import_monthly_csv)
+        self.btn_import_csv.hide()
+        footer_layout.addWidget(self.btn_import_csv)
+        
+        self.btn_load_example = QPushButton("📋 Carregar Exemplo")
+        self.btn_load_example.setObjectName("btn_secondary")
+        self.btn_load_example.setCursor(Qt.PointingHandCursor)
+        self.btn_load_example.clicked.connect(self._load_example_data)
+        self.btn_load_example.hide()
+        footer_layout.addWidget(self.btn_load_example)
+        
+        self.btn_clear_data = QPushButton("🗑️ Limpar")
+        self.btn_clear_data.setObjectName("btn_danger")
+        self.btn_clear_data.setCursor(Qt.PointingHandCursor)
+        self.btn_clear_data.clicked.connect(self._clear_all_data)
+        self.btn_clear_data.hide()
+        footer_layout.addWidget(self.btn_clear_data)
+        
+        # Botões específicos da página 4 (geração)
+        self.btn_export_scenarios = QPushButton("📥 Exportar CSV")
+        self.btn_export_scenarios.setObjectName("btn_secondary")
+        self.btn_export_scenarios.setCursor(Qt.PointingHandCursor)
+        self.btn_export_scenarios.clicked.connect(self._export_scenarios)
+        self.btn_export_scenarios.hide()
+        footer_layout.addWidget(self.btn_export_scenarios)
+        
+        self.btn_import_scenarios = QPushButton("📤 Importar Cenários")
+        self.btn_import_scenarios.setObjectName("btn_secondary")
+        self.btn_import_scenarios.setCursor(Qt.PointingHandCursor)
+        self.btn_import_scenarios.clicked.connect(self._import_scenarios)
+        self.btn_import_scenarios.hide()
+        footer_layout.addWidget(self.btn_import_scenarios)
         
         footer_layout.addStretch()
         
@@ -974,26 +1308,40 @@ class MonthlyDataWizard(QDialog):
         current = self.stacked.currentIndex()
         self.btn_prev.setVisible(current > 0)
         
+        # Botões específicos da página 2 (dados mensais)
+        is_page2 = (current == 1)
+        self.btn_export_csv.setVisible(is_page2)
+        self.btn_import_csv.setVisible(is_page2)
+        self.btn_load_example.setVisible(is_page2)
+        self.btn_clear_data.setVisible(is_page2)
+        
+        # Botões específicos da página 4 (geração)
+        is_page4 = (current == 3)
+        has_result = (self.result is not None)
+        self.btn_export_scenarios.setVisible(is_page4 and has_result)
+        self.btn_import_scenarios.setVisible(is_page4)
+        
         if current == 3:
             self.btn_next.hide()
-            self.btn_finish.setVisible(self.result is not None)
+            self.btn_finish.setVisible(has_result)
         else:
             self.btn_next.show()
             self.btn_finish.hide()
             self.btn_next.setEnabled(current != 1 or len(self.monthly_values) >= 12)
 
     def _prepare_bootstrap_data(self):
+        """Prepara dados para bootstrap a partir da tabela."""
         if len(self.monthly_values) < 12:
             return
         try:
-            def period_sort_key(p):
-                month, year = p.split('/')
-                return int(year) * 12 + MONTHS_PT.index(month)
+            # Ordenar por número do mês (1, 2, 3, ...)
+            sorted_keys = sorted(self.monthly_values.keys(), key=lambda x: int(x))
             
-            sorted_periods = sorted(self.monthly_values.keys(), key=period_sort_key)
-            returns = np.array([self.monthly_values[p] for p in sorted_periods])
+            # Criar lista de períodos sequenciais
+            periods = [f"Mês {k}" for k in sorted_keys]
+            returns = np.array([self.monthly_values[k] for k in sorted_keys])
             
-            self.monthly_data = MonthlyReturnData(periods=sorted_periods, returns=returns)
+            self.monthly_data = MonthlyReturnData(periods=periods, returns=returns)
             self.engine = BootstrapEngine(self.monthly_data)
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao preparar dados:\n{str(e)}")

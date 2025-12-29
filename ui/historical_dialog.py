@@ -174,57 +174,83 @@ class HistoricalReturnsDialog(QDialog):
                 border-radius: 12px;
                 padding: 16px;
             }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
         """)
         
         form_layout = QHBoxLayout(form_frame)
         form_layout.setSpacing(12)
+        form_layout.setAlignment(Qt.AlignVCenter)
+        
+        # Estilo comum para labels de cabeçalho (sem borda)
+        label_style = "font-weight: 500; color: #374151; font-size: 12px; border: none; background: transparent; padding: 0px;"
+        
+        # Estilo comum para campos de entrada
+        input_style = """
+            padding: 8px 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            background-color: white;
+            font-size: 13px;
+        """
         
         # Ano
         year_layout = QVBoxLayout()
-        year_layout.setSpacing(4)
+        year_layout.setSpacing(6)
         year_label = QLabel("Ano")
-        year_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 12px;")
+        year_label.setStyleSheet(label_style)
         self.year_input = QSpinBox()
         self.year_input.setRange(1900, 2100)
         self.year_input.setValue(2024)
-        self.year_input.setMinimumWidth(100)
+        self.year_input.setFixedWidth(100)
+        self.year_input.setFixedHeight(36)
+        self.year_input.setStyleSheet(input_style)
         year_layout.addWidget(year_label)
         year_layout.addWidget(self.year_input)
         form_layout.addLayout(year_layout)
         
         # Retorno
         return_layout = QVBoxLayout()
-        return_layout.setSpacing(4)
+        return_layout.setSpacing(6)
         return_label = QLabel("Retorno Anual (%)")
-        return_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 12px;")
+        return_label.setStyleSheet(label_style)
         self.return_input = QDoubleSpinBox()
         self.return_input.setRange(-100, 500)
         self.return_input.setDecimals(2)
         self.return_input.setSuffix(" %")
         self.return_input.setValue(10.0)
-        self.return_input.setMinimumWidth(120)
+        self.return_input.setFixedWidth(130)
+        self.return_input.setFixedHeight(36)
+        self.return_input.setStyleSheet(input_style)
         return_layout.addWidget(return_label)
         return_layout.addWidget(self.return_input)
         form_layout.addLayout(return_layout)
         
         # Notas
         notes_layout = QVBoxLayout()
-        notes_layout.setSpacing(4)
+        notes_layout.setSpacing(6)
         notes_label = QLabel("Notas (opcional)")
-        notes_label.setStyleSheet("font-weight: 500; color: #374151; font-size: 12px;")
+        notes_label.setStyleSheet(label_style)
         self.notes_input = QLineEdit()
         self.notes_input.setPlaceholderText("Ex: Ano de crise")
+        self.notes_input.setFixedHeight(36)
+        self.notes_input.setStyleSheet(input_style)
         notes_layout.addWidget(notes_label)
         notes_layout.addWidget(self.notes_input)
         form_layout.addLayout(notes_layout, stretch=1)
         
         # Botão Adicionar
         add_layout = QVBoxLayout()
-        add_layout.setSpacing(4)
-        add_layout.addWidget(QLabel(""))
+        add_layout.setSpacing(6)
+        spacer_label = QLabel("")
+        spacer_label.setStyleSheet("border: none; background: transparent;")
+        add_layout.addWidget(spacer_label)
         btn_add = QPushButton("➕ Adicionar")
         btn_add.setObjectName("btn_primary")
         btn_add.setCursor(Qt.PointingHandCursor)
+        btn_add.setFixedHeight(36)
         btn_add.clicked.connect(self._add_return)
         add_layout.addWidget(btn_add)
         form_layout.addLayout(add_layout)

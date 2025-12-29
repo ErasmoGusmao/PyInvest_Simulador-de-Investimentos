@@ -1898,8 +1898,8 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, 'synthetic_scenarios') and self.synthetic_scenarios is not None:
             result = self.synthetic_scenarios
             self.historical_status.setText(
-                f"✓ {result.n_scenarios:,} cenários sintéticos | "
-                f"Média: {result.mean:.1f}% | P5/P95: {result.p5:.1f}%/{result.p95:.1f}%"
+                f"✓ {result.n_scenarios:,} cenários sintéticos\n"
+                f"Média: {result.mean:.1f}% | P5/P95: {result.p5:.1f}% / {result.p95:.1f}%"
             )
             self.historical_status.setStyleSheet("""
                 font-size: 11px;

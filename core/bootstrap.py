@@ -574,6 +574,12 @@ def generate_monthly_template_csv() -> str:
     """
     Gera template CSV para preenchimento de dados mensais.
     
+    Formato:
+        Nº do Mês;Retorno do Mês (%);Observação
+        1;0.00;
+        2;0.00;
+        ...
+    
     Returns:
         String com conteúdo CSV do template
     """
@@ -581,15 +587,11 @@ def generate_monthly_template_csv() -> str:
     writer = csv.writer(output, delimiter=';')
     
     # Header
-    writer.writerow(['Período', 'Retorno (%)', 'Notas'])
+    writer.writerow(['Nº do Mês', 'Retorno do Mês (%)', 'Observação'])
     
-    # Gerar linhas para 9 anos (2017-2025)
-    months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-              'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-    
-    for year in range(2017, 2026):
-        for month in months:
-            writer.writerow([f'{month}/{year}', '0.00', ''])
+    # Gerar 12 linhas de exemplo
+    for month_num in range(1, 13):
+        writer.writerow([str(month_num), '', ''])
     
     return output.getvalue()
 
@@ -597,6 +599,10 @@ def generate_monthly_template_csv() -> str:
 def parse_monthly_csv(csv_content: str) -> MonthlyReturnData:
     """
     Faz parse de CSV com dados mensais.
+    
+    Aceita dois formatos:
+    1. Novo formato: Nº do Mês;Retorno do Mês (%);Observação
+    2. Formato legado: Período;Retorno (%);Notas (com Mmm/AAAA)
     
     Args:
         csv_content: Conteúdo do arquivo CSV
@@ -620,8 +626,12 @@ def parse_monthly_csv(csv_content: str) -> MonthlyReturnData:
     
     reader = csv.reader(data_lines, delimiter=delimiter)
     
-    # Pular header
+    # Ler header para detectar formato
     header = next(reader)
+    header_lower = [h.lower().strip() for h in header]
+    
+    # Detectar se é formato novo (Nº do Mês) ou legado (Período com Mmm/AAAA)
+    is_new_format = any('mês' in h or 'mes' in h or 'month' in h for h in header_lower)
     
     periods = []
     returns = []
@@ -631,15 +641,32 @@ def parse_monthly_csv(csv_content: str) -> MonthlyReturnData:
         if len(row) < 2:
             continue
         
-        period = row[0].strip()
+        first_col = row[0].strip()
         
-        # Validar formato do período
-        if '/' not in period:
-            raise ValueError(f"Linha {row_num}: Período '{period}' inválido. Use formato 'Mmm/AAAA'")
+        # Pular linhas vazias
+        if not first_col:
+            continue
+        
+        # Parse do período/número
+        if '/' in first_col:
+            # Formato legado: Mmm/AAAA
+            period = first_col
+        else:
+            # Formato novo: número sequencial
+            try:
+                month_num = int(first_col)
+                period = f"Mês {month_num}"
+            except ValueError:
+                raise ValueError(f"Linha {row_num}: '{first_col}' não é número válido")
         
         # Parse do retorno (aceitar vírgula ou ponto como decimal)
+        return_str = row[1].strip().replace(',', '.').replace('%', '')
+        
+        # Pular linhas sem retorno preenchido
+        if not return_str:
+            continue
+            
         try:
-            return_str = row[1].strip().replace(',', '.')
             return_val = float(return_str)
         except ValueError:
             raise ValueError(f"Linha {row_num}: Retorno '{row[1]}' não é número válido")
