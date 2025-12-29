@@ -268,6 +268,15 @@ class MonthlyDataWizard(QDialog):
         self.card_annual.mousePressEvent = lambda e: self._select_data_type('annual')
         options_layout.addWidget(self.card_annual)
         
+        # Card de Importação Rápida (atalho para Etapa 4)
+        self.card_import = self._create_option_card(
+            title="📥 Importar Cenários",
+            description="Carregue cenários previamente gerados\n\n• Pule diretamente para análise\n• Formato CSV suportado\n• Reutilize simulações anteriores\n• Ideal para comparações",
+            recommended=False
+        )
+        self.card_import.mousePressEvent = lambda e: self._import_and_skip_to_results()
+        options_layout.addWidget(self.card_import)
+        
         layout.addLayout(options_layout)
         
         self.radio_monthly = QRadioButton()
@@ -967,91 +976,282 @@ class MonthlyDataWizard(QDialog):
             self.acf_diagnosis_text.setHtml(f"<span style='color:red;'>Erro: {str(e)}</span>")
 
     def _create_page4_generation(self):
+        """
+        Etapa 4 - Geração de Cenários (Layout Unificado)
+        
+        Estrutura:
+        - Cabeçalho compacto: Input de cenários + botão gerar
+        - Área principal: Histograma (60%) + Estatísticas (40%)
+        - Sem abas - visão contínua
+        """
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(48, 32, 48, 32)
-        layout.setSpacing(24)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
         
-        config_frame = QFrame()
-        config_frame.setObjectName("card")
-        config_layout = QVBoxLayout(config_frame)
-        config_layout.setContentsMargins(20, 20, 20, 20)
+        # ═══════════════════════════════════════════════════════════════
+        # BARRA DE COMANDO - Altura mínima, alinhamento perfeito
+        # ═══════════════════════════════════════════════════════════════
+        header_frame = QFrame()
+        header_frame.setObjectName("header_bar")
+        header_frame.setFixedHeight(50)
+        header_frame.setStyleSheet("""
+            QFrame#header_bar {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
         
-        config_title = QLabel("Número de Cenários a Gerar")
-        config_title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        config_layout.addWidget(config_title)
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 5, 12, 5)
+        header_layout.setSpacing(10)
+        header_layout.setAlignment(Qt.AlignVCenter)
         
-        scenarios_layout = QHBoxLayout()
+        # Label - mesma fonte do SpinBox
+        config_label = QLabel("Número de Cenários:")
+        config_label.setStyleSheet("font-weight: 600; color: #374151; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif;")
+        header_layout.addWidget(config_label)
         
+        # SpinBox - fonte harmonizada
         self.scenarios_spin = QSpinBox()
         self.scenarios_spin.setRange(1000, 100000)
         self.scenarios_spin.setSingleStep(1000)
         self.scenarios_spin.setValue(10000)
-        self.scenarios_spin.setMinimumWidth(150)
+        self.scenarios_spin.setFixedWidth(110)
+        self.scenarios_spin.setFixedHeight(30)
+        self.scenarios_spin.setStyleSheet("""
+            QSpinBox {
+                font-size: 13px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-weight: 600;
+                padding: 2px 8px;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                background: white;
+            }
+            QSpinBox:focus {
+                border-color: #3B82F6;
+            }
+        """)
         self.scenarios_spin.valueChanged.connect(self._update_time_estimate)
-        scenarios_layout.addWidget(self.scenarios_spin)
+        header_layout.addWidget(self.scenarios_spin)
         
-        self.time_estimate_label = QLabel("Tempo estimado: ~5s")
-        self.time_estimate_label.setStyleSheet("color: #6B7280;")
-        scenarios_layout.addWidget(self.time_estimate_label)
-        scenarios_layout.addStretch()
+        # Tempo estimado
+        self.time_estimate_label = QLabel("≈ 5s")
+        self.time_estimate_label.setStyleSheet("color: #9CA3AF; font-size: 12px;")
+        self.time_estimate_label.setFixedWidth(50)
+        header_layout.addWidget(self.time_estimate_label)
         
-        self.btn_generate = QPushButton("🔄 Gerar Cenários")
-        self.btn_generate.setObjectName("btn_generate")
-        self.btn_generate.setCursor(Qt.PointingHandCursor)
-        self.btn_generate.clicked.connect(self._start_generation)
-        scenarios_layout.addWidget(self.btn_generate)
-        
-        config_layout.addLayout(scenarios_layout)
-        
+        # Progress bar inline (compacta)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFixedWidth(120)
+        self.progress_bar.setFixedHeight(16)
         self.progress_bar.setVisible(False)
-        config_layout.addWidget(self.progress_bar)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 8px;
+                background-color: #E5E7EB;
+                text-align: center;
+                font-size: 10px;
+            }
+            QProgressBar::chunk {
+                border-radius: 8px;
+                background-color: #10B981;
+            }
+        """)
+        header_layout.addWidget(self.progress_bar)
         
-        layout.addWidget(config_frame)
+        header_layout.addStretch()
         
+        # Botão Gerar - compacto
+        self.btn_generate = QPushButton("🔄 Gerar Cenários")
+        self.btn_generate.setObjectName("btn_generate")
+        self.btn_generate.setCursor(Qt.PointingHandCursor)
+        self.btn_generate.setFixedHeight(32)
+        self.btn_generate.setStyleSheet("""
+            QPushButton {
+                background-color: #8B5CF6;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #7C3AED;
+            }
+            QPushButton:pressed {
+                background-color: #6D28D9;
+            }
+            QPushButton:disabled {
+                background-color: #C4B5FD;
+            }
+        """)
+        self.btn_generate.clicked.connect(self._start_generation)
+        header_layout.addWidget(self.btn_generate)
+        
+        layout.addWidget(header_frame)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # ÁREA DE RESULTADOS (Histograma + Estatísticas) - Sem abas
+        # ═══════════════════════════════════════════════════════════════
         self.results_frame = QFrame()
-        self.results_frame.setObjectName("card")
+        self.results_frame.setObjectName("results_area")
+        self.results_frame.setStyleSheet("""
+            QFrame#results_area {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
         self.results_frame.hide()
         
-        results_layout = QVBoxLayout(self.results_frame)
-        results_layout.setContentsMargins(20, 20, 20, 20)
+        results_main_layout = QVBoxLayout(self.results_frame)
+        results_main_layout.setContentsMargins(0, 0, 0, 0)
+        results_main_layout.setSpacing(0)
         
-        results_title = QLabel("✅ Cenários Gerados com Sucesso")
-        results_title.setStyleSheet("font-weight: bold; font-size: 16px; color: #059669;")
-        results_layout.addWidget(results_title)
+        # ScrollArea para conteúdo responsivo
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         
-        tabs = QTabWidget()
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background: white;")
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(12, 12, 12, 12)
+        scroll_layout.setSpacing(12)
         
-        stats_tab = QWidget()
-        stats_layout = QVBoxLayout(stats_tab)
-        self.stats_grid = QGridLayout()
-        self.stats_grid.setSpacing(12)
-        stats_layout.addLayout(self.stats_grid)
-        tabs.addTab(stats_tab, "📊 Estatísticas")
+        # Título de sucesso - compacto
+        success_header = QHBoxLayout()
+        success_header.setSpacing(8)
+        success_icon = QLabel("✅")
+        success_icon.setStyleSheet("font-size: 16px;")
+        success_header.addWidget(success_icon)
         
-        dist_tab = QWidget()
-        dist_layout = QVBoxLayout(dist_tab)
-        dist_layout.setContentsMargins(8, 8, 8, 8)
+        success_title = QLabel("Cenários Gerados com Sucesso")
+        success_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #059669;")
+        success_header.addWidget(success_title)
+        success_header.addStretch()
+        
+        scroll_layout.addLayout(success_header)
+        
+        # ─────────────────────────────────────────────────────────────
+        # SEÇÃO 1: HISTOGRAMA - Topo, expansível
+        # ─────────────────────────────────────────────────────────────
+        chart_section = QFrame()
+        chart_section.setObjectName("chart_section")
+        chart_section.setStyleSheet("""
+            QFrame#chart_section {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+            }
+        """)
+        chart_layout_inner = QVBoxLayout(chart_section)
+        chart_layout_inner.setContentsMargins(8, 8, 8, 8)
+        chart_layout_inner.setSpacing(4)
+        
+        chart_title = QLabel("📊 Distribuição dos Retornos Anuais")
+        chart_title.setStyleSheet("font-weight: 600; font-size: 13px; color: #374151;")
+        chart_title.setAlignment(Qt.AlignCenter)
+        chart_layout_inner.addWidget(chart_title)
+        
         self.dist_chart = QWebEngineView()
-        self.dist_chart.setMinimumHeight(350)  # Aumentado para melhor visualização
-        dist_layout.addWidget(self.dist_chart)
-        tabs.addTab(dist_tab, "📈 Distribuição")
+        self.dist_chart.setMinimumHeight(400)
+        self.dist_chart.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        chart_layout_inner.addWidget(self.dist_chart)
         
-        results_layout.addWidget(tabs)
+        scroll_layout.addWidget(chart_section, stretch=6)  # 60%
         
-        # Botões movidos para o footer - removidos daqui
+        # ─────────────────────────────────────────────────────────────
+        # SEÇÃO 2: ESTATÍSTICAS - Abaixo do histograma, 100% largura
+        # ─────────────────────────────────────────────────────────────
+        stats_section = QFrame()
+        stats_section.setObjectName("stats_section")
+        stats_section.setStyleSheet("""
+            QFrame#stats_section {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+            }
+        """)
+        stats_section_layout = QVBoxLayout(stats_section)
+        stats_section_layout.setContentsMargins(12, 10, 12, 10)
+        stats_section_layout.setSpacing(8)
         
-        layout.addWidget(self.results_frame)
-        layout.addStretch()
+        stats_title = QLabel("📈 Estatísticas dos Cenários")
+        stats_title.setStyleSheet("font-weight: 600; font-size: 13px; color: #374151;")
+        stats_title.setAlignment(Qt.AlignCenter)
+        stats_section_layout.addWidget(stats_title)
+        
+        # Grid de estatísticas - ocupa 100% da largura
+        self.stats_grid = QGridLayout()
+        self.stats_grid.setSpacing(8)
+        self.stats_grid.setContentsMargins(0, 0, 0, 0)
+        stats_section_layout.addLayout(self.stats_grid)
+        
+        scroll_layout.addWidget(stats_section, stretch=4)  # 40%
+        
+        scroll_area.setWidget(scroll_content)
+        results_main_layout.addWidget(scroll_area)
+        
+        layout.addWidget(self.results_frame, stretch=1)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # PLACEHOLDER - Quando não há resultados
+        # ═══════════════════════════════════════════════════════════════
+        self.placeholder_frame = QFrame()
+        self.placeholder_frame.setObjectName("placeholder")
+        self.placeholder_frame.setStyleSheet("""
+            QFrame#placeholder {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
+        
+        placeholder_layout = QVBoxLayout(self.placeholder_frame)
+        placeholder_layout.setContentsMargins(40, 40, 40, 40)
+        placeholder_layout.setAlignment(Qt.AlignCenter)
+        
+        placeholder_icon = QLabel("🎲")
+        placeholder_icon.setStyleSheet("font-size: 48px;")
+        placeholder_icon.setAlignment(Qt.AlignCenter)
+        placeholder_layout.addWidget(placeholder_icon)
+        
+        placeholder_text = QLabel("Clique em 'Gerar Cenários' para iniciar a simulação Bootstrap")
+        placeholder_text.setStyleSheet("color: #9CA3AF; font-size: 13px;")
+        placeholder_text.setAlignment(Qt.AlignCenter)
+        placeholder_text.setWordWrap(True)
+        placeholder_layout.addWidget(placeholder_text)
+        
+        layout.addWidget(self.placeholder_frame, stretch=1)
+        
         self.stacked.addWidget(page)
 
     def _update_time_estimate(self):
         n = self.scenarios_spin.value()
         time_sec = estimate_generation_time(n)
-        self.time_estimate_label.setText(f"Tempo estimado: {format_time_estimate(time_sec)}")
+        self.time_estimate_label.setText(f"≈ {format_time_estimate(time_sec)}")
 
     def _start_generation(self):
         if not self.engine:
@@ -1084,6 +1284,9 @@ class MonthlyDataWizard(QDialog):
         self.btn_generate.setEnabled(True)
         self.progress_bar.setVisible(False)
         self._display_results()
+        
+        # Mostrar resultados, esconder placeholder
+        self.placeholder_frame.hide()
         self.results_frame.show()
         self._update_navigation_buttons()
 
@@ -1101,6 +1304,11 @@ class MonthlyDataWizard(QDialog):
             item = self.stats_grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        
+        # Função para converter hex para rgb
+        def hex_to_rgb(hex_color):
+            hex_color = hex_color.lstrip('#')
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
         
         stats = [
             ("Cenários", f"{r.n_scenarios:,}", "#3B82F6"),
@@ -1121,11 +1329,21 @@ class MonthlyDataWizard(QDialog):
             row, col = i // 4, i % 4
             card = QFrame()
             card.setMinimumHeight(60)
+            
+            # Converter cor hex para rgba para background
+            rgb = hex_to_rgb(color)
+            bg_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.1)"
+            border_color = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.3)"
+            
             card.setStyleSheet(f"""
                 QFrame {{ 
-                    background-color: {color}15; 
-                    border: 1px solid {color}30; 
+                    background-color: {bg_color}; 
+                    border: 1px solid {border_color}; 
                     border-radius: 8px; 
+                }}
+                QLabel {{
+                    border: none;
+                    background: transparent;
                 }}
             """)
             card_layout = QVBoxLayout(card)
@@ -1142,18 +1360,206 @@ class MonthlyDataWizard(QDialog):
             
             self.stats_grid.addWidget(card, row, col)
         
-        returns = r.annual_returns.tolist()
-        html = f"""<!DOCTYPE html><html><head><script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script><style>body {{ margin: 0; }}</style></head><body>
-        <div id="chart" style="width:100%;height:340px;"></div><script>
-        var data = [{{x: {returns}, type: 'histogram', nbinsx: 50, marker: {{color: '#8B5CF6', line: {{color: '#7C3AED', width: 1}}}}, hovertemplate: 'Retorno: %{{x:.2f}}%<br>Freq: %{{y}}<extra></extra>'}}];
-        var layout = {{margin: {{l: 60, r: 30, t: 30, b: 50}}, xaxis: {{title: 'Retorno Anual (%)'}}, yaxis: {{title: 'Frequência'}}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            shapes: [{{type: 'line', x0: {r.p5}, x1: {r.p5}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#EF4444', width: 2, dash: 'dash'}}}},
-                     {{type: 'line', x0: {r.p95}, x1: {r.p95}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#10B981', width: 2, dash: 'dash'}}}},
-                     {{type: 'line', x0: {r.mean}, x1: {r.mean}, y0: 0, y1: 1, yref: 'paper', line: {{color: '#3B82F6', width: 2}}}}],
-            annotations: [{{x: {r.p5}, y: 1, yref: 'paper', text: 'P5', showarrow: false, yanchor: 'bottom'}},
-                          {{x: {r.p95}, y: 1, yref: 'paper', text: 'P95', showarrow: false, yanchor: 'bottom'}},
-                          {{x: {r.mean}, y: 1, yref: 'paper', text: 'Média', showarrow: false, yanchor: 'bottom'}}]}};
-        Plotly.newPlot('chart', data, layout, {{responsive: true}});</script></body></html>"""
+        # Histograma refatorado com visibilidade total dos eixos
+        self._render_distribution_chart(r)
+
+    def _render_distribution_chart(self, result):
+        """
+        Renderiza histograma de distribuição com visibilidade total dos eixos.
+        
+        Configurações otimizadas:
+        - Margens explícitas para garantir espaço aos títulos
+        - Linha da Mediana (P50) em preto sólido
+        - Posicionamento estratégico de rótulos (sem sobreposição)
+        - Template plotly_white para contraste máximo
+        """
+        returns = result.annual_returns.tolist()
+        
+        # HTML com container responsivo e estilos otimizados
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden;
+            background: white;
+        }}
+        #chart {{ 
+            width: 100%; 
+            height: 100%; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }}
+    </style>
+</head>
+<body>
+    <div id="chart"></div>
+    <script>
+        var data = [{{
+            x: {returns},
+            type: 'histogram',
+            nbinsx: 50,
+            marker: {{
+                color: '#8B5CF6',
+                line: {{color: '#7C3AED', width: 1}}
+            }},
+            hovertemplate: 'Retorno: %{{x:.2f}}%<br>Frequência: %{{y}}<extra></extra>'
+        }}];
+        
+        var layout = {{
+            // Margens explícitas para visibilidade total
+            margin: {{l: 80, r: 50, t: 70, b: 80}},
+            
+            // Autosize para responsividade
+            autosize: true,
+            
+            // Template de alto contraste
+            template: 'plotly_white',
+            
+            // Configuração do Eixo X
+            xaxis: {{
+                title: {{
+                    text: 'Retorno Anual (%)',
+                    font: {{size: 14, color: '#1F2937', family: 'Arial, sans-serif'}},
+                    standoff: 20
+                }},
+                showticklabels: true,
+                tickfont: {{size: 12, color: '#374151'}},
+                tickformat: '.0f',
+                showgrid: true,
+                gridcolor: '#E5E7EB',
+                gridwidth: 1,
+                zeroline: true,
+                zerolinecolor: '#9CA3AF',
+                showline: true,
+                linecolor: '#D1D5DB',
+                linewidth: 1,
+                mirror: false
+            }},
+            
+            // Configuração do Eixo Y
+            yaxis: {{
+                title: {{
+                    text: 'Frequência (Cenários)',
+                    font: {{size: 14, color: '#1F2937', family: 'Arial, sans-serif'}},
+                    standoff: 15
+                }},
+                showticklabels: true,
+                tickfont: {{size: 12, color: '#374151'}},
+                rangemode: 'tozero',
+                showgrid: true,
+                gridcolor: '#E5E7EB',
+                gridwidth: 1,
+                zeroline: true,
+                zerolinecolor: '#9CA3AF',
+                showline: true,
+                linecolor: '#D1D5DB',
+                linewidth: 1,
+                mirror: false
+            }},
+            
+            // Cores de fundo
+            paper_bgcolor: 'white',
+            plot_bgcolor: '#FAFAFA',
+            
+            // Linhas de referência (P5, Média, Mediana, P95)
+            shapes: [
+                // P5 - Pessimista (vermelho tracejado)
+                {{
+                    type: 'line',
+                    x0: {result.p5}, x1: {result.p5},
+                    y0: 0, y1: 1, yref: 'paper',
+                    line: {{color: '#EF4444', width: 2, dash: 'dash'}}
+                }},
+                // Média (azul sólido)
+                {{
+                    type: 'line',
+                    x0: {result.mean}, x1: {result.mean},
+                    y0: 0, y1: 1, yref: 'paper',
+                    line: {{color: '#3B82F6', width: 2, dash: 'solid'}}
+                }},
+                // Mediana P50 (preto sólido - destaque central)
+                {{
+                    type: 'line',
+                    x0: {result.median}, x1: {result.median},
+                    y0: 0, y1: 1, yref: 'paper',
+                    line: {{color: '#1F2937', width: 2, dash: 'solid'}}
+                }},
+                // P95 - Otimista (verde tracejado)
+                {{
+                    type: 'line',
+                    x0: {result.p95}, x1: {result.p95},
+                    y0: 0, y1: 1, yref: 'paper',
+                    line: {{color: '#10B981', width: 2, dash: 'dash'}}
+                }}
+            ],
+            
+            // Anotações com posicionamento estratégico (sem sobreposição)
+            annotations: [
+                // P5 - Rótulo à ESQUERDA da linha
+                {{
+                    x: {result.p5}, y: 1.02, yref: 'paper',
+                    text: '<b>P5</b><br>{result.p5:.1f}%',
+                    showarrow: false,
+                    font: {{size: 10, color: '#EF4444'}},
+                    xanchor: 'right',
+                    align: 'right'
+                }},
+                // Média - Rótulo à ESQUERDA da linha
+                {{
+                    x: {result.mean}, y: 1.02, yref: 'paper',
+                    text: '<b>Média</b><br>{result.mean:.1f}%',
+                    showarrow: false,
+                    font: {{size: 10, color: '#3B82F6'}},
+                    xanchor: 'right',
+                    align: 'right'
+                }},
+                // Mediana P50 - Rótulo à DIREITA da linha
+                {{
+                    x: {result.median}, y: 1.02, yref: 'paper',
+                    text: '<b>P50</b><br>{result.median:.1f}%',
+                    showarrow: false,
+                    font: {{size: 10, color: '#1F2937'}},
+                    xanchor: 'left',
+                    align: 'left'
+                }},
+                // P95 - Rótulo à DIREITA da linha
+                {{
+                    x: {result.p95}, y: 1.02, yref: 'paper',
+                    text: '<b>P95</b><br>{result.p95:.1f}%',
+                    showarrow: false,
+                    font: {{size: 10, color: '#10B981'}},
+                    xanchor: 'left',
+                    align: 'left'
+                }}
+            ]
+        }};
+        
+        var config = {{
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d']
+        }};
+        
+        Plotly.newPlot('chart', data, layout, config);
+        
+        // Redesenhar ao redimensionar
+        window.addEventListener('resize', function() {{
+            Plotly.Plots.resize('chart');
+        }});
+    </script>
+</body>
+</html>"""
+        
         self.dist_chart.setHtml(html)
 
     def _export_scenarios(self):
@@ -1190,6 +1596,68 @@ class MonthlyDataWizard(QDialog):
             QMessageBox.information(self, "Importação", f"{len(returns):,} cenários importados!")
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao importar:\n{str(e)}")
+
+    def _import_and_skip_to_results(self):
+        """
+        Importa cenários diretamente da Etapa 1 e pula para Etapa 4.
+        
+        Fluxo:
+        1. Abre seletor de arquivos
+        2. Importa cenários do CSV
+        3. Pula diretamente para Etapa 4 (visualização)
+        """
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Importar Cenários Existentes", 
+            "", 
+            "CSV de Cenários (*.csv);;Todos os arquivos (*)"
+        )
+        
+        if not filepath:
+            return
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            returns, metadata = import_scenarios_csv(content)
+            
+            # Criar resultado a partir dos dados importados
+            self.result = SyntheticScenariosResult(
+                annual_returns=returns,
+                n_scenarios=len(returns),
+                method=metadata.get('Método', 'importado'),
+                block_size=None,
+                source_period=metadata.get('Período Fonte', 'N/A'),
+                source_n_months=int(metadata.get('Meses Fonte', 0)) if metadata.get('Meses Fonte', '').isdigit() else 0,
+                generation_time=0.0,
+                seed=None
+            )
+            
+            # Exibir resultados
+            self._display_results()
+            
+            # Pular diretamente para Etapa 4 (índice 3)
+            self._go_to_page(3)
+            
+            # Mostrar frame de resultados, esconder placeholder
+            self.placeholder_frame.hide()
+            self.results_frame.show()
+            
+            QMessageBox.information(
+                self, 
+                "Importação Bem-Sucedida", 
+                f"✅ {len(returns):,} cenários importados!\n\n"
+                f"Você foi direcionado para a visualização dos resultados."
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Erro na Importação", 
+                f"Não foi possível importar os cenários:\n\n{str(e)}\n\n"
+                "Verifique se o arquivo está no formato correto."
+            )
 
     def _create_footer(self, parent_layout):
         footer = QFrame()
