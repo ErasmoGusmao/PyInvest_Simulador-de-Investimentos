@@ -1321,6 +1321,16 @@ class ModernMainWindow(QMainWindow):
         is_expert_mode = hasattr(self, 'check_expert_mode') and self.check_expert_mode.isChecked()
         has_historical = len(self.historical_returns) >= 2
         
+        # Verificar se há cenários sintéticos (v6.0)
+        has_synthetic = (
+            hasattr(self, 'synthetic_scenarios') and 
+            self.synthetic_scenarios is not None and 
+            len(self.synthetic_scenarios.annual_returns) >= 100
+        )
+        
+        # Modo Expert é válido com histórico OU sintético
+        has_expert_data = has_historical or has_synthetic
+        
         # Obter ranges
         capital_range = self.input_capital.get_parameter_range()
         aporte_range = self.input_aporte.get_parameter_range()
@@ -1329,11 +1339,19 @@ class ModernMainWindow(QMainWindow):
         # =====================================================================
         # MODO EXPERT: VALIDAÇÃO FLEXÍVEL
         # =====================================================================
-        if is_expert_mode and has_historical:
-            # Calcular estatísticas dos retornos históricos
-            returns = [r.return_rate * 100 for r in self.historical_returns]
-            avg_return = float(np.mean(returns))
-            std_return = float(np.std(returns))
+        if is_expert_mode and has_expert_data:
+            # Calcular estatísticas dos retornos (históricos ou sintéticos)
+            if has_synthetic:
+                # Usar estatísticas dos cenários sintéticos
+                avg_return = float(self.synthetic_scenarios.mean)
+                std_return = float(self.synthetic_scenarios.std)
+                data_source = f"{self.synthetic_scenarios.n_scenarios:,} cenários sintéticos"
+            else:
+                # Usar retornos históricos tradicionais
+                returns = [r.return_rate * 100 for r in self.historical_returns]
+                avg_return = float(np.mean(returns))
+                std_return = float(np.std(returns))
+                data_source = f"{len(self.historical_returns)} anos históricos"
             
             # Capital: se não preenchido, usar valor mínimo razoável
             if capital_range.deterministic is None and capital_range.min_value is None:
@@ -1361,7 +1379,7 @@ class ModernMainWindow(QMainWindow):
                     max_value=aporte_range.max_value or aporte_range.min_value or 0
                 )
             
-            # Rentabilidade: derivar dos dados históricos
+            # Rentabilidade: derivar dos dados históricos/sintéticos
             if rent_range.deterministic is None and rent_range.min_value is None:
                 rent_range = ParameterRange(
                     min_value=max(-30, avg_return - 2 * std_return),
@@ -1370,7 +1388,7 @@ class ModernMainWindow(QMainWindow):
                 )
                 self.status_bar.showMessage(
                     f"📊 Modo Expert: Rentabilidade derivada = {avg_return:.1f}% ± {std_return:.1f}% "
-                    f"({len(self.historical_returns)} anos históricos)"
+                    f"({data_source})"
                 )
             elif rent_range.deterministic is None:
                 rent_range = ParameterRange(
@@ -1396,8 +1414,8 @@ class ModernMainWindow(QMainWindow):
             # Validar Rentabilidade
             is_valid, error = rent_range.validate()
             if not is_valid:
-                if is_expert_mode and not has_historical:
-                    errors.append("Modo Expert: adicione pelo menos 2 registros de Rendimento Histórico.")
+                if is_expert_mode and not has_expert_data:
+                    errors.append("Modo Expert: adicione dados de Rendimento (Histórico ou Mensal via Wizard).")
                 else:
                     errors.append(f"Rentabilidade: {error}")
         
@@ -1423,10 +1441,9 @@ class ModernMainWindow(QMainWindow):
         if is_expert_mode:
             method_idx = self.combo_method.currentIndex() if hasattr(self, 'combo_method') else 0
             
-            if method_idx == 0 and not has_historical:  # Bootstrap requer dados
-                errors.append("Bootstrap: requer pelo menos 2 registros de rendimento histórico.")
-            elif method_idx == 0 and len(self.historical_returns) < 2:
-                errors.append(f"Bootstrap: encontrado apenas {len(self.historical_returns)} registro(s). Mínimo: 2.")
+            # Bootstrap requer dados históricos OU sintéticos
+            if method_idx == 0 and not has_expert_data:
+                errors.append("Bootstrap: requer dados de rendimento (Histórico ou Mensal via Wizard).")
         
         if errors:
             return False, errors, None
@@ -1440,6 +1457,13 @@ class ModernMainWindow(QMainWindow):
         if is_expert_mode and has_historical:
             historical_returns_list = [r.return_rate * 100 for r in self.historical_returns]
         
+        # Obter cenários sintéticos se disponíveis
+        synthetic_array = None
+        use_synthetic = False
+        if has_synthetic:
+            synthetic_array = self.synthetic_scenarios.annual_returns
+            use_synthetic = True
+        
         # Criar input Monte Carlo com todos os campos
         mc_input = MonteCarloInput(
             capital_inicial=capital_range,
@@ -1451,11 +1475,14 @@ class ModernMainWindow(QMainWindow):
             start_date=start_date,
             events_manager=self.events_manager if self.events_manager.count > 0 else None,
             # Campos do Modo Expert
-            expert_mode=is_expert_mode and has_historical,
+            expert_mode=is_expert_mode and has_expert_data,
             historical_returns=historical_returns_list,
             simulation_method=['bootstrap', 'normal', 't_student'][
                 self.combo_method.currentIndex() if hasattr(self, 'combo_method') else 0
-            ] if is_expert_mode else 'bootstrap'
+            ] if is_expert_mode else 'bootstrap',
+            # Cenários Sintéticos (v6.0)
+            synthetic_scenarios=synthetic_array,
+            use_synthetic=use_synthetic
         )
         
         return True, [], mc_input

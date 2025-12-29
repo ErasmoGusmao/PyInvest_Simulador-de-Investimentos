@@ -105,6 +105,7 @@ class MonthlyDataWizard(QDialog):
     """Wizard de 4 passos para entrada de dados mensais e geração de cenários."""
     
     scenarios_confirmed = Signal(object)
+    use_annual_data = Signal()  # Emitido quando usuário escolhe dados anuais
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -957,6 +958,8 @@ class MonthlyDataWizard(QDialog):
         
         if current == 0:
             if self.radio_annual.isChecked():
+                # Emitir signal para abrir diálogo de dados anuais
+                self.use_annual_data.emit()
                 self.reject()
                 return
         elif current == 1:

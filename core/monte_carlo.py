@@ -54,6 +54,40 @@ def bootstrap_returns(
     return simulated_returns
 
 
+def synthetic_scenario_returns(
+    synthetic_scenarios: np.ndarray,
+    n_years: int,
+    n_simulations: int,
+    seed: Optional[int] = None
+) -> np.ndarray:
+    """
+    Gera retornos via reamostragem de Cenários Sintéticos.
+    
+    Usa os cenários pré-gerados pelo Bootstrap Mensal (v6.0) como pool
+    de retornos anuais possíveis e reamostra para cada simulação.
+    
+    Args:
+        synthetic_scenarios: Array de retornos anuais sintéticos (em %)
+        n_years: Número de anos a simular
+        n_simulations: Número de simulações
+        seed: Seed para reprodutibilidade
+        
+    Returns:
+        Array (n_simulations, n_years) de retornos anuais em %
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # Reamostrar com reposição do pool de cenários sintéticos
+    simulated_returns = np.random.choice(
+        synthetic_scenarios, 
+        size=(n_simulations, n_years),
+        replace=True
+    )
+    
+    return simulated_returns
+
+
 def normal_returns(
     mean_return: float,
     std_return: float,
@@ -259,6 +293,10 @@ class MonteCarloInput:
     historical_returns: List[float] = field(default_factory=list)  # Retornos anuais em %
     simulation_method: str = 'bootstrap'  # 'bootstrap', 'normal', 't_student'
     
+    # === CENÁRIOS SINTÉTICOS (v6.0) ===
+    synthetic_scenarios: Optional[np.ndarray] = None  # Array de retornos anuais sintéticos
+    use_synthetic: bool = False  # Flag para usar cenários sintéticos
+    
     def validate_all(self) -> Tuple[bool, List[str]]:
         """
         Valida todos os parâmetros.
@@ -302,7 +340,13 @@ class MonteCarloInput:
     
     def has_expert_mode(self) -> bool:
         """Verifica se o Modo Expert está ativado com dados suficientes."""
-        return self.expert_mode and len(self.historical_returns) >= 2
+        has_historical = self.expert_mode and len(self.historical_returns) >= 2
+        has_synthetic = self.use_synthetic and self.synthetic_scenarios is not None and len(self.synthetic_scenarios) >= 100
+        return has_historical or has_synthetic
+    
+    def has_synthetic_scenarios(self) -> bool:
+        """Verifica se há cenários sintéticos disponíveis."""
+        return self.use_synthetic and self.synthetic_scenarios is not None and len(self.synthetic_scenarios) >= 100
 
 
 @dataclass
@@ -529,26 +573,38 @@ class MonteCarloEngine:
         simulation_method_used = None  # Para rastreamento
         
         # =====================================================================
-        # MODO EXPERT: Simulação com retornos históricos
+        # MODO EXPERT: Simulação com retornos históricos OU cenários sintéticos
         # =====================================================================
         if has_expert:
             simulation_method_used = self.inputs.simulation_method
             n_sim = self.inputs.n_simulations
             
-            # Gerar retornos anuais baseado no método escolhido
-            historical = self.inputs.historical_returns
-            mean_ret = float(np.mean(historical))
-            std_ret = float(np.std(historical))
-            
-            if self.inputs.simulation_method == 'bootstrap':
-                annual_returns = bootstrap_returns(historical, years, n_sim)
-            elif self.inputs.simulation_method == 'normal':
-                annual_returns = normal_returns(mean_ret, std_ret, years, n_sim)
-            elif self.inputs.simulation_method == 't_student':
-                annual_returns = t_student_returns(mean_ret, std_ret, years, n_sim)
+            # =====================================================================
+            # PRIORIDADE: Cenários Sintéticos (v6.0) > Bootstrap Histórico
+            # =====================================================================
+            if self.inputs.has_synthetic_scenarios():
+                # Usar cenários sintéticos gerados pelo Bootstrap Mensal
+                simulation_method_used = 'synthetic_bootstrap'
+                annual_returns = synthetic_scenario_returns(
+                    self.inputs.synthetic_scenarios, 
+                    years, 
+                    n_sim
+                )
             else:
-                # Fallback para bootstrap
-                annual_returns = bootstrap_returns(historical, years, n_sim)
+                # Fallback: usar retornos históricos anuais tradicionais
+                historical = self.inputs.historical_returns
+                mean_ret = float(np.mean(historical))
+                std_ret = float(np.std(historical))
+                
+                if self.inputs.simulation_method == 'bootstrap':
+                    annual_returns = bootstrap_returns(historical, years, n_sim)
+                elif self.inputs.simulation_method == 'normal':
+                    annual_returns = normal_returns(mean_ret, std_ret, years, n_sim)
+                elif self.inputs.simulation_method == 't_student':
+                    annual_returns = t_student_returns(mean_ret, std_ret, years, n_sim)
+                else:
+                    # Fallback para bootstrap
+                    annual_returns = bootstrap_returns(historical, years, n_sim)
             
             # Executar simulação com retornos anuais variáveis
             all_balances, sampled_capitals, sampled_monthlies, sampled_rates = \
